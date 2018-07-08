@@ -23,20 +23,38 @@ godStateInit = GodState {
 
 type SimulationMonadT m a = StateT GodState (StateT SimulationState m) a
 
-getNextUpcomingCall :: Monad m =>
+getNextCall :: Monad m =>
 	StateT GodState m (Maybe (Time, CallerInfo))
-getNextUpcomingCall =
+getNextCall =
 	get >>= \godState@GodState{..} ->
-	do
-		let mNextCall = M.minViewWithKey godState_upcomingCalls
-		case mNextCall of
-			Nothing -> return Nothing
-			Just (nextCall, futureCallsRest) ->
-				do
-					put $ godState{ godState_upcomingCalls = futureCallsRest }
-					return $ Just nextCall
+		return $ M.lookupMin godState_upcomingCalls
 
-getNextEndCall 
+getNextEndCall :: Monad m =>
+	StateT GodState m (Maybe (Time, CallerInfo))
+getNextEndCall =
+	get >>= \godState@GodState{..} ->
+		return $ M.lookupMin godState_callEndTimes
+
+popNextCall :: Monad m =>
+	StateT GodState m (Maybe (Time, CallerInfo))
+popNextCall =
+	do
+		next <- getNextCall
+		modify $ \godState@GodState{..} ->
+			godState{ godState_upcomingCalls = M.deleteMin godState_upcomingCalls }
+		return next
+
+popNextEndCall :: Monad m =>
+	StateT GodState m (Maybe (Time, CallerInfo))
+popNextEndCall =
+	do
+		next <- getNextEndCall
+		modify $ \godState@GodState{..} ->
+			godState{ godState_callEndTimes = M.deleteMin godState_callEndTimes }
+		return next
+
+{-
+popNextEndCall =
 	get >>= \godState@GodState{..} ->
 	do
 		let mNext = M.minViewWithKey godState_callEndTimes
@@ -46,6 +64,7 @@ getNextEndCall
 				do
 					put $ godState{ godState_callEndTimes = remainingEvents }
 					return $ Just nextEvent
+-}
 
 withGodState :: Monad m => StateT GodState m a -> SimulationMonadT m a 
 withGodState f =

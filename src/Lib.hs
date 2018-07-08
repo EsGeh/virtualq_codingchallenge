@@ -57,7 +57,7 @@ simulateOneHour t =
 			doLog $ concat [ "\tstate = ", show simState]
 		withSimState serveCalls
 		-- hangupCalls
-		mNextCall <- withGodState popNextUpcomingCall
+		mNextCall <- withGodState popNextCall
 		case mNextCall of
 			Nothing -> return ()
 			Just (eventT, callerInfo) ->
