@@ -30,6 +30,10 @@ library:
     - MonadRandom
     - containers
     - mtl
+    # - logging-effect
+  other-modules:
+    - Types
+    - MonadLog
 
 executables:
   queuing-simulation-exe:
