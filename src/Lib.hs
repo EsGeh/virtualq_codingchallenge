@@ -16,6 +16,18 @@ import Control.Monad.State
 import System.IO
 import Data.List
 
+data CallersArgs
+	= CallersArgs {
+		density :: Float,
+		callDurationRange :: (Time, Time)
+	}
+
+callersArgs =
+	CallersArgs {
+		density = 10,
+		callDurationRange = (2,20)
+	}
+
 runSimulation :: IO ()
 runSimulation =
 	do
@@ -36,7 +48,7 @@ runMainLoop runtime t =
 	else
 		do
 			-- calculate distribution of incoming calls:
-			withGodState $ spawnCallers 10 t (t+1)
+			withGodState $ spawnCallers callersArgs t (t+1)
 			-- run simulation:
 			simulateOneHour t
 			runMainLoop runtime (t+1)
@@ -48,16 +60,32 @@ simulateOneHour t =
 		withSimState $ get >>= \simState ->
 			doLog $ concat [ "\tstate = ", show simState]
 		withSimState serveCalls
-		getGodState >>= \godState@GodState{..} ->
-			do
-				let mNextCall = M.minViewWithKey godState_upcomingCalls
-				case mNextCall of
-					Nothing -> return ()
-					Just ((eventT, callerInfo), futureCallsRest) ->
-						do
-							modifySimState $ addCallerToQ callerInfo
-							putGodState $ godState{ godState_upcomingCalls = futureCallsRest }
-							simulateOneHour eventT
+		-- hangupCalls
+		mNextCall <- withGodState getNextUpcomingCall
+		case mNextCall of
+			Nothing -> return ()
+			Just (eventT, callerInfo) ->
+				do
+					modifySimState $ addCallerToQ callerInfo
+					simulateOneHour eventT
+
+getNextUpcomingCall :: Monad m =>
+	StateT GodState m (Maybe (Time, CallerInfo))
+getNextUpcomingCall =
+	get >>= \godState@GodState{..} ->
+	do
+		let mNextCall = M.minViewWithKey godState_upcomingCalls
+		case mNextCall of
+			Nothing -> return Nothing
+			Just (nextCall, futureCallsRest) ->
+				do
+					put $ godState{ godState_upcomingCalls = futureCallsRest }
+					return $ Just nextCall
+
+{-
+hangupCalls :: SimulationMonadT m ()
+hangupCalls = undefined
+-}
 
 -- 
 serveCalls :: MonadState SimulationState m => m ()
@@ -71,21 +99,28 @@ serveCalls =
 -- helper functions:
 --------------------------------------------------
 
-spawnCallers :: forall m . (MonadRandom m, MonadState GodState m) => Float -> Time -> Time -> m ()
-spawnCallers density start end =
+spawnCallers :: forall m . (MonadRandom m, MonadState GodState m) => CallersArgs -> Time -> Time -> m ()
+spawnCallers CallersArgs{..} start end =
 	let
 		number = ceiling $ (end-start)*density
 	in
 		do
-			eventTimes <-
+			callTimes <-
 				sort <$>
 				take number <$>
 				getRandomRs (start, end)
+				:: m [Time]
+			callDurations <-
+				take number <$>
+				getRandomRs callDurationRange
 				:: m [Time]
 			get >>= \godState@GodState{..} ->
 				do
 					let callerIds = CallerInfo <$> take number [godState_counter..]
 					put $ godState{
-						godState_upcomingCalls = M.fromList $ eventTimes `zip` callerIds,
+						godState_upcomingCalls =
+							M.fromList $ callTimes `zip` callerIds,
+						godState_callEndTimes =
+							M.fromList $ (zipWith (+) callTimes callDurations) `zip` callerIds,
 						godState_counter = godState_counter + number
 					}

@@ -8,7 +8,7 @@ import Control.Monad.State
 data GodState
 	= GodState {
 		godState_upcomingCalls :: TimeQ CallerInfo,
-		godState_callHangups :: TimeQ CallerInfo,
+		godState_callEndTimes :: TimeQ CallerInfo,
 		godState_counter :: Int
 	}
 	deriving( Show, Read, Eq, Ord)
