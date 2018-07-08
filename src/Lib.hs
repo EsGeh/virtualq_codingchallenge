@@ -1,6 +1,7 @@
-module Lib
-    ( someFunc
-    ) where
+module Lib(
+	runSimulation
+) where
 
-someFunc :: IO ()
-someFunc = putStrLn "someFunc"
+runSimulation :: IO ()
+runSimulation =
+	putStrLn "not yet implemented"
