@@ -14,19 +14,19 @@ import qualified Data.Set as S
 import Control.Monad.Random
 import Control.Monad.State
 import System.IO
+import Data.List
 
 runSimulation :: IO ()
 runSimulation =
 	do
 		_ <- evalStateT (evalStateT (runMainLoop 3 0) godStateInit) initState
 		return ()
-	where
-		initState = SimulationState [] 50 S.empty
-		godStateInit = GodState {
-			godState_upcomingCalls = M.empty,
-			godState_counter = 0
-		}
 
+initState = SimulationState [] 50 S.empty
+godStateInit = GodState {
+	godState_upcomingCalls = M.empty,
+	godState_counter = 0
+}
 
 runMainLoop ::
 	(MonadLog m, MonadRandom m) =>
@@ -78,7 +78,9 @@ spawnCallers density start end =
 	in
 		do
 			eventTimes <-
-				take number <$> getRandomRs (start, end)
+				sort <$>
+				take number <$>
+				getRandomRs (start, end)
 				:: m [Time]
 			get >>= \godState@GodState{..} ->
 				do
