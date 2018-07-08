@@ -25,8 +25,10 @@ data CallersArgs
 callersArgs =
 	CallersArgs {
 		density = 10,
-		callDurationRange = (2,20)
+		callDurationRange = (2 * minute, 20 * minute)
 	}
+
+minute = 1 / 60
 
 runSimulation :: IO ()
 runSimulation =
@@ -46,31 +48,36 @@ runMainLoop runtime t =
 			-- calculate distribution of incoming calls:
 			withGodState $ spawnCallers callersArgs t (t+1)
 			-- run simulation:
-			simulateOneHour t
+			simulateOneHour (t+1)
 			runMainLoop runtime (t+1)
 
 simulateOneHour :: (MonadLog m) => Time -> SimulationMonadT m ()
-simulateOneHour t =
+simulateOneHour tMax =
 	do
-		doLog $ concat [ "simulateOneHour t = ", show t]
-		withSimState $ get >>= \simState ->
-			doLog $ concat [ "\tstate = ", show simState]
-		withSimState serveCalls
-		-- hangupCalls
-		mNextCall <- withGodState popNextCall
-		case mNextCall of
+		mNextEvent <- withGodState popNextEvent
+		case mNextEvent of
 			Nothing -> return ()
-			Just (eventT, callerInfo) ->
-				do
-					modifySimState $ addCallerToQ callerInfo
-					simulateOneHour eventT
+			Just (t, event) ->
+				if t >= tMax
+				then return ()
+				else
+					do
+						doLog $ concat [ "t = ", show t]
+						case event of
+							IncomingCall callerInfo ->
+								do
+									doLog $ concat [ "\tincoming call: ", show callerInfo]
+									modifySimState $ addCallerToQ callerInfo
+									simulateOneHour tMax
+							HangupCall callerInfo ->
+								do
+									doLog $ concat [ "\tcall ended: ", show callerInfo]
+									modifySimState $ hangupCall callerInfo
+									withSimState serveCalls
+									simulateOneHour tMax
+	
 
-{-
-hangupCalls :: SimulationMonadT m ()
-hangupCalls = undefined
--}
-
--- 
+-- |while there are any free agents, take call:
 serveCalls :: MonadState SimulationState m => m ()
 serveCalls =
 	get >>= \simState ->
@@ -101,9 +108,15 @@ spawnCallers CallersArgs{..} start end =
 				do
 					let callerIds = CallerInfo <$> take number [godState_counter..]
 					put $ godState{
+						godState_upcomingEvents =
+							(M.fromList $ callTimes `zip` (IncomingCall <$> callerIds))
+							`M.union`
+							(M.fromList $ zipWith (+) callTimes callDurations `zip` (HangupCall <$> callerIds)),
+						{-
 						godState_upcomingCalls =
 							M.fromList $ callTimes `zip` callerIds,
 						godState_callEndTimes =
 							M.fromList $ (zipWith (+) callTimes callDurations) `zip` callerIds,
+						-}
 						godState_counter = godState_counter + number
 					}

@@ -9,62 +9,37 @@ import Control.Monad.State
 
 data GodState
 	= GodState {
-		godState_upcomingCalls :: TimeQ CallerInfo,
-		godState_callEndTimes :: TimeQ CallerInfo,
+		godState_upcomingEvents :: TimeQ GodEvent,
 		godState_counter :: Int
 	}
 	deriving( Show, Read, Eq, Ord)
 
+data GodEvent
+	= IncomingCall CallerInfo
+	| HangupCall CallerInfo
+	deriving( Show, Read, Eq, Ord)
+
+getNextEvent :: Monad m =>
+	StateT GodState m (Maybe (Time, GodEvent))
+getNextEvent =
+	get >>= \godState@GodState{..} ->
+		return $ M.lookupMin godState_upcomingEvents
+
+popNextEvent :: Monad m =>
+	StateT GodState m (Maybe (Time, GodEvent))
+popNextEvent =
+	do
+		next <- getNextEvent
+		modify $ \godState@GodState{..} ->
+			godState{ godState_upcomingEvents = M.deleteMin godState_upcomingEvents }
+		return next
+
 godStateInit = GodState {
-	godState_upcomingCalls = M.empty,
-	godState_callEndTimes = M.empty,
+	godState_upcomingEvents = M.empty,
 	godState_counter = 0
 }
 
 type SimulationMonadT m a = StateT GodState (StateT SimulationState m) a
-
-getNextCall :: Monad m =>
-	StateT GodState m (Maybe (Time, CallerInfo))
-getNextCall =
-	get >>= \godState@GodState{..} ->
-		return $ M.lookupMin godState_upcomingCalls
-
-getNextEndCall :: Monad m =>
-	StateT GodState m (Maybe (Time, CallerInfo))
-getNextEndCall =
-	get >>= \godState@GodState{..} ->
-		return $ M.lookupMin godState_callEndTimes
-
-popNextCall :: Monad m =>
-	StateT GodState m (Maybe (Time, CallerInfo))
-popNextCall =
-	do
-		next <- getNextCall
-		modify $ \godState@GodState{..} ->
-			godState{ godState_upcomingCalls = M.deleteMin godState_upcomingCalls }
-		return next
-
-popNextEndCall :: Monad m =>
-	StateT GodState m (Maybe (Time, CallerInfo))
-popNextEndCall =
-	do
-		next <- getNextEndCall
-		modify $ \godState@GodState{..} ->
-			godState{ godState_callEndTimes = M.deleteMin godState_callEndTimes }
-		return next
-
-{-
-popNextEndCall =
-	get >>= \godState@GodState{..} ->
-	do
-		let mNext = M.minViewWithKey godState_callEndTimes
-		case mNextCall of
-			Nothing -> return Nothing
-			Just (nextEvent, remainingEvents) ->
-				do
-					put $ godState{ godState_callEndTimes = remainingEvents }
-					return $ Just nextEvent
--}
 
 withGodState :: Monad m => StateT GodState m a -> SimulationMonadT m a 
 withGodState f =
