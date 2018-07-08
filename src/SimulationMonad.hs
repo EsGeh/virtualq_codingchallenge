@@ -1,7 +1,9 @@
+{-# LANGUAGE RecordWildCards #-}
 module SimulationMonad where
 
 import Types
 
+import qualified Data.Map as M
 import Control.Monad.State
 
 
@@ -13,8 +15,38 @@ data GodState
 	}
 	deriving( Show, Read, Eq, Ord)
 
+godStateInit = GodState {
+	godState_upcomingCalls = M.empty,
+	godState_callEndTimes = M.empty,
+	godState_counter = 0
+}
+
 type SimulationMonadT m a = StateT GodState (StateT SimulationState m) a
- 
+
+getNextUpcomingCall :: Monad m =>
+	StateT GodState m (Maybe (Time, CallerInfo))
+getNextUpcomingCall =
+	get >>= \godState@GodState{..} ->
+	do
+		let mNextCall = M.minViewWithKey godState_upcomingCalls
+		case mNextCall of
+			Nothing -> return Nothing
+			Just (nextCall, futureCallsRest) ->
+				do
+					put $ godState{ godState_upcomingCalls = futureCallsRest }
+					return $ Just nextCall
+
+getNextEndCall 
+	get >>= \godState@GodState{..} ->
+	do
+		let mNext = M.minViewWithKey godState_callEndTimes
+		case mNextCall of
+			Nothing -> return Nothing
+			Just (nextEvent, remainingEvents) ->
+				do
+					put $ godState{ godState_callEndTimes = remainingEvents }
+					return $ Just nextEvent
+
 withGodState :: Monad m => StateT GodState m a -> SimulationMonadT m a 
 withGodState f =
 	get >>= \g ->

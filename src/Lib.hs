@@ -35,10 +35,6 @@ runSimulation =
 		return ()
 
 initState = SimulationState [] 50 S.empty
-godStateInit = GodState {
-	godState_upcomingCalls = M.empty,
-	godState_counter = 0
-}
 
 runMainLoop ::
 	(MonadLog m, MonadRandom m) =>
@@ -61,26 +57,13 @@ simulateOneHour t =
 			doLog $ concat [ "\tstate = ", show simState]
 		withSimState serveCalls
 		-- hangupCalls
-		mNextCall <- withGodState getNextUpcomingCall
+		mNextCall <- withGodState popNextUpcomingCall
 		case mNextCall of
 			Nothing -> return ()
 			Just (eventT, callerInfo) ->
 				do
 					modifySimState $ addCallerToQ callerInfo
 					simulateOneHour eventT
-
-getNextUpcomingCall :: Monad m =>
-	StateT GodState m (Maybe (Time, CallerInfo))
-getNextUpcomingCall =
-	get >>= \godState@GodState{..} ->
-	do
-		let mNextCall = M.minViewWithKey godState_upcomingCalls
-		case mNextCall of
-			Nothing -> return Nothing
-			Just (nextCall, futureCallsRest) ->
-				do
-					put $ godState{ godState_upcomingCalls = futureCallsRest }
-					return $ Just nextCall
 
 {-
 hangupCalls :: SimulationMonadT m ()
