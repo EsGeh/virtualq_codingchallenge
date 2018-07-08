@@ -24,7 +24,7 @@ data CallersArgs
 
 callersArgs =
 	CallersArgs {
-		density = 10,
+		density = 4,
 		callDurationRange = (2 * minute, 20 * minute)
 	}
 
@@ -54,36 +54,53 @@ runMainLoop runtime t =
 simulateOneHour :: (MonadLog m) => Time -> SimulationMonadT m ()
 simulateOneHour tMax =
 	do
-		mNextEvent <- withGodState popNextEvent
+		mNextEvent <- withGodState getNextEvent
 		case mNextEvent of
-			Nothing -> return ()
+			Nothing ->
+				do
+					doLog $ concat [ "no next event!" ]
+					return ()
 			Just (t, event) ->
 				if t >= tMax
-				then return ()
+				then
+					do
+						doLog $ concat [ "tMax reached!" ]
+						return ()
 				else
 					do
+						_ <- popNextEvent
 						doLog $ concat [ "t = ", show t]
 						case event of
 							IncomingCall callerInfo ->
 								do
 									doLog $ concat [ "\tincoming call: ", show callerInfo]
 									modifySimState $ addCallerToQ callerInfo
-									simulateOneHour tMax
+									withSimState serveCalls
 							HangupCall callerInfo ->
 								do
 									doLog $ concat [ "\tcall ended: ", show callerInfo]
 									modifySimState $ hangupCall callerInfo
 									withSimState serveCalls
-									simulateOneHour tMax
+						simulateOneHour tMax
 	
 
 -- |while there are any free agents, take call:
-serveCalls :: MonadState SimulationState m => m ()
+serveCalls :: (MonadLog m, MonadState SimulationState m) => m ()
 serveCalls =
-	get >>= \simState ->
-	case takeCall simState of
-		Nothing -> return ()
-		Just newSimState -> put newSimState >> serveCalls
+	get >>= \simState@SimulationState{..} ->
+	do
+		case getCallFromQ simState of
+			Nothing -> return ()
+			Just nextCaller ->
+				do
+					let mNewState = takeCall simState
+					case mNewState of
+						Nothing -> return ()
+						Just newState ->
+							do
+								doLog $ concat [ "\tcall ", show nextCaller, " accepted"]
+								put newState
+								serveCalls
 
 --------------------------------------------------
 -- helper functions:
@@ -109,14 +126,9 @@ spawnCallers CallersArgs{..} start end =
 					let callerIds = CallerInfo <$> take number [godState_counter..]
 					put $ godState{
 						godState_upcomingEvents =
+							(godState_upcomingEvents `M.union`) $
 							(M.fromList $ callTimes `zip` (IncomingCall <$> callerIds))
 							`M.union`
 							(M.fromList $ zipWith (+) callTimes callDurations `zip` (HangupCall <$> callerIds)),
-						{-
-						godState_upcomingCalls =
-							M.fromList $ callTimes `zip` callerIds,
-						godState_callEndTimes =
-							M.fromList $ (zipWith (+) callTimes callDurations) `zip` callerIds,
-						-}
 						godState_counter = godState_counter + number
 					}

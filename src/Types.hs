@@ -35,6 +35,10 @@ type TimeQ a = M.Map Time a
 -- manipulate "SimulationState"
 --------------------------------------------------
 
+getCallFromQ :: SimulationState -> Maybe CallerInfo
+getCallFromQ simState@SimulationState{..} =
+	listToMaybe simState_callerQ
+
 takeCall :: SimulationState -> Maybe SimulationState
 takeCall simState@SimulationState{..} =
 	if (simState_availableAgents == 0)
