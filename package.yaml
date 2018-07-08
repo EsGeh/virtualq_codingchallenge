@@ -25,7 +25,11 @@ dependencies:
 library:
   source-dirs: src
   ghc-options:
-    - -fno-warn-tabs 
+    - -fno-warn-tabs
+  dependencies:
+    - MonadRandom
+    - containers
+    - mtl
 
 executables:
   queuing-simulation-exe:
