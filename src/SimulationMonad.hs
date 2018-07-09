@@ -1,8 +1,12 @@
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module SimulationMonad where
 
 import Types
 import History
+import SchedulerAPI
 
 import qualified Data.Map as M
 import Control.Monad.State
@@ -95,6 +99,20 @@ runSimulationMonad initState =
 			glob_history = M.empty
 		}
 
+-- this is the monad in which the scheduler runs:
+newtype SchedulerMonadT d m a = SchedulerMonadT { fromSchedulerMonadT :: StateT (GlobalState d) m a }
+	deriving( MonadTrans, Applicative, Monad, Functor )
+
+instance (Monad m) => MonadState d (SchedulerMonadT d m) where
+	get = SchedulerMonadT $ getSimState
+	put = SchedulerMonadT . putSimState
+
+instance (MonadLog m) => SchedulerMonad d (SchedulerMonadT d m) where
+	-- setTimer = _
+
+instance (MonadLog m) => MonadLog (SchedulerMonadT d m) where
+	doLog str = SchedulerMonadT $ doLog str
+
 -- history:
 addToHistory :: Monad m => CallerInfo -> HistoryEntry -> SimulationMonadT (GlobalState s) m ()
 addToHistory callerInfo entry =
@@ -112,13 +130,16 @@ withGodState f =
 			put glob{ glob_god = x' }
 			return ret
 
-withSimState :: Monad m => StateT s m a -> SimulationMonadT (GlobalState s) m a 
-withSimState f =
+withSimState :: Monad m => SchedulerMonadT s m a -> SimulationMonadT (GlobalState s) m a 
+withSimState =
+	fromSchedulerMonadT
+{-
 	get >>= \glob@GlobalState{ glob_simState = x } ->
 		do
-			(ret, x') <- lift $ runStateT f x
+			(ret, x') <- lift $ runStateT (fromSchedulerMonadT f) x
 			put glob{ glob_simState = x' }
 			return ret
+-}
 
 getGodState :: Monad m => SimulationMonadT (GlobalState s) m GodState
 getGodState = gets glob_god
@@ -134,5 +155,7 @@ modifySimState = modify . glob_mapToSimState
 putSimState x = modifySimState $ const x
 putGodState x = modifyGodState $ const x
 
+{-
 mapFst f (a, b) = (f a, b)
 mapSnd f (a, b) = (a, f b)
+-}

@@ -2,8 +2,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 module Scheduler where
 
-import Types
-import MonadLog
+import SchedulerAPI
 
 import qualified Data.Set as S
 import Control.Monad.State
@@ -22,7 +21,7 @@ data Data
 initData = Data [] 2 S.empty
 
 onIncomingCall ::
-	(MonadLog m, MonadState Data m) =>
+	(SchedulerMonad Data m) =>
 	CallerInfo -> m [CallerInfo]
 onIncomingCall callerInfo =
 	--error "todo"
@@ -37,7 +36,7 @@ onIncomingCall callerInfo =
 		return acceptedCalls
 
 onHangupCall ::
-	(MonadLog m, MonadState Data m) =>
+	(SchedulerMonad Data m) =>
 	CallerInfo -> m [CallerInfo]
 onHangupCall callerInfo =
 	do
@@ -77,7 +76,7 @@ hangupCall callerInfo simState@Data{..} =
 	}
 
 serveCalls ::
-	(Monad m, MonadState Data m) =>
+	(SchedulerMonad Data m) =>
 	m [CallerInfo]
 serveCalls =
 	get >>= \simState@Data{..} ->

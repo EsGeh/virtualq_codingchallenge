@@ -39,8 +39,7 @@ minute = 1 / 60
 runSimulation :: IO ()
 runSimulation =
 	do
-		_ <-
-			runSimulationMonad Sched.initData (runMainLoop 3 0)
+		_ <- runSimulationMonad Sched.initData (runMainLoop 3 0)
 		return ()
 
 runMainLoop ::
