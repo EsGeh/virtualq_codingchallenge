@@ -7,7 +7,8 @@ module Lib(
 
 import Types
 import SimulationMonad
--- import Analytics
+import History
+import Analysis
 import MonadLog
 
 import qualified Data.Map as M
@@ -28,7 +29,7 @@ data CallersArgs
 
 callersArgs =
 	CallersArgs {
-		density = 4,
+		density = 10,
 		callDurationRange = (2 * minute, 20 * minute)
 	}
 
@@ -41,7 +42,7 @@ runSimulation =
 			runSimulationMonad initState (runMainLoop 3 0)
 		return ()
 
-initState = SimulationState [] 50 S.empty
+initState = SimulationState [] 2 S.empty
 
 runMainLoop ::
 	(MonadLog m, MonadRandom m) =>
@@ -79,34 +80,47 @@ simulateOneHour tMax =
 							IncomingCall callerInfo ->
 								do
 									doLog $ concat [ "\tincoming call: ", show callerInfo]
-									-- addLoggerEntry $ LoggerEntry IncomingCallEvent callerInfo t
+									addToHistory callerInfo $ HistoryEntry t IncomingCallEvent
 									modifySimState $ addCallerToQ callerInfo
-									withSimState serveCalls
+									acceptedCalls <- withSimState serveCalls
+									when (null acceptedCalls) $
+										do
+											doLog $ concat [ "\tall agents are busy!"]
+											waitingQ <- simState_callerQ  <$> getSimState
+											doLog $ concat [ "\twaiting Q: ", show waitingQ]
+									mapM_ (\callerInfo -> addToHistory callerInfo $ HistoryEntry t ServeCallEvent) acceptedCalls
 							HangupCall callerInfo ->
 								do
-									-- addLoggerEntry $ LoggerEntry HangupCallEvent callerInfo t
+									addToHistory callerInfo $ HistoryEntry t HangupCallEvent
 									doLog $ concat [ "\tcall ended: ", show callerInfo]
 									modifySimState $ hangupCall callerInfo
-									withSimState serveCalls
+									acceptedCalls <- withSimState serveCalls
+									mapM_ (\callerInfo -> addToHistory callerInfo $ HistoryEntry t ServeCallEvent) acceptedCalls
+						-- print analysis data:
+						history <- getHistory
+						doLog $ concat $ ["\tavg waiting time: ", show $ calcAvgWaitingTime history ]
 						simulateOneHour tMax
 
--- |while there are any free agents, take call:
-serveCalls :: (MonadLog m, MonadState SimulationState m) => m ()
+{- |while there are any free agents, take call:
+ - |returns all accepted calls
+-}
+serveCalls :: (MonadLog m, MonadState SimulationState m) => m [CallerInfo]
 serveCalls =
 	get >>= \simState@SimulationState{..} ->
 	do
 		case getCallFromQ simState of
-			Nothing -> return ()
+			Nothing -> return []
 			Just nextCaller ->
 				do
 					let mNewState = takeCall simState
 					case mNewState of
-						Nothing -> return ()
+						Nothing -> return []
 						Just newState ->
 							do
 								doLog $ concat [ "\tcall ", show nextCaller, " accepted"]
 								put newState
-								serveCalls
+								furtherCalls <- serveCalls
+								return $ nextCaller : furtherCalls
 
 --------------------------------------------------
 -- helper functions:

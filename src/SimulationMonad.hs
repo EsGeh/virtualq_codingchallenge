@@ -2,7 +2,7 @@
 module SimulationMonad where
 
 import Types
--- import Analytics
+import History
 
 import qualified Data.Map as M
 import Control.Monad.State
@@ -11,23 +11,24 @@ import Control.Monad.RWS
 import Control.Monad.Identity
 
 
--- |secret simulation state
+-- global simulation state
+data GlobalState
+	= GlobalState {
+		glob_god :: GodState,
+		glob_simState :: SimulationState,
+		glob_history :: History
+}
+
+-- |secret simulation state (things only god knows)
 data GodState
 	= GodState {
-		godState_upcomingEvents :: TimeQ Event, -- ^ stores upcoming events
+		godState_upcomingEvents :: TimeQ Event, -- ^ upcoming events
 		godState_counter :: Int -- ^ internal counter
 	}
 	deriving( Show, Read, Eq, Ord)
 
-data GlobalState
-	= GlobalState {
-		glob_god :: GodState,
-		glob_simState :: SimulationState
-		-- glob_log :: LoggerData
-}
-
 --------------------------------------------------
--- pseudo lenses:
+-- pseudo lenses for `GlobalState` (boilerplate)
 --------------------------------------------------
 
 glob_mapToGod f = runIdentity . glob_mapToGodM (return . f)
@@ -44,6 +45,14 @@ glob_mapToSimStateM f x =
 	do
 		val <- f $ glob_simState x
 		return $ x{ glob_simState = val }
+
+glob_mapToHistory f = runIdentity . glob_mapToHistoryM (return . f)
+
+glob_mapToHistoryM :: Monad m => (History -> m History) -> GlobalState -> m GlobalState
+glob_mapToHistoryM f x =
+	do
+		val <- f $ glob_history x
+		return $ x{ glob_history = val }
 
 godStateInit = GodState {
 	godState_upcomingEvents = M.empty,
@@ -82,16 +91,19 @@ runSimulationMonad initState =
 	where
 		init = GlobalState{
 			glob_god = godStateInit,
-			glob_simState = initState
-			-- glob_log = [] 
+			glob_simState = initState,
+			glob_history = M.empty
 		}
 
-{-
-addLoggerEntry :: Monad m => LoggerEntry -> SimulationMonadT GlobalState m ()
-addLoggerEntry entry =
-	modify $ \
--}
+-- history:
+addToHistory :: Monad m => CallerInfo -> HistoryEntry -> SimulationMonadT GlobalState m ()
+addToHistory callerInfo entry =
+	modify $ glob_mapToHistory $ addEntry callerInfo entry
 
+getHistory :: Monad m => SimulationMonadT GlobalState m History
+getHistory = gets glob_history
+
+--
 withGodState :: Monad m => StateT GodState m a -> SimulationMonadT GlobalState m a 
 withGodState f =
 	get >>= \glob@GlobalState{ glob_god = x } ->
