@@ -1,6 +1,6 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE FlexibleContexts #-}
-module Scheduler where
+module SchedulerBase where
 
 import SchedulerAPI
 
@@ -17,31 +17,6 @@ data Data
 		simState_currentCalls :: S.Set CallerInfo
 	}
 	deriving( Show, Read, Eq, Ord)
-
-initData = Data [] 2 S.empty
-
-onIncomingCall ::
-	(SchedulerMonad Data m) =>
-	CallerInfo -> m [CallerInfo]
-onIncomingCall callerInfo =
-	--error "todo"
-	do
-		modify $ addCallerToQ callerInfo
-		acceptedCalls <- serveCalls
-		when (null acceptedCalls) $
-			do
-				doLog $ concat [ "\tall agents are busy!"]
-				waitingQ <- simState_callerQ  <$> get
-				doLog $ concat [ "\twaiting Q: ", show waitingQ]
-		return acceptedCalls
-
-onHangupCall ::
-	(SchedulerMonad Data m) =>
-	CallerInfo -> m [CallerInfo]
-onHangupCall callerInfo =
-	do
-		modify $ hangupCall callerInfo
-		serveCalls
 
 --------------------------------------------------
 -- manipulate "Data"

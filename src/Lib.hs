@@ -7,10 +7,11 @@ module Lib(
 
 import Types
 import SimulationMonad
+import SchedulerAPI
 import History
 import Analysis
 import MonadLog
-import qualified Scheduler as Sched
+import qualified NaiveScheduler as NaiveSched
 
 import qualified Data.Map as M
 import qualified Data.Set as S
@@ -39,24 +40,33 @@ minute = 1 / 60
 runSimulation :: IO ()
 runSimulation =
 	do
-		_ <- runSimulationMonad Sched.initData (runMainLoop 3 0)
+		doLog $ concat ["simulating with NaiveScheduler..."]
+		_ <- runSimulationMonad NaiveSched.initData (runMainLoop NaiveSched.impl 3 0)
+		-- TODO: ...
+		{-
+		doLog $ concat ["simulating with VQScheduler..."]
+		-}
 		return ()
 
 runMainLoop ::
 	(MonadLog m, MonadRandom m) =>
-	Time -> Time -> SimulationMonadT (GlobalState Sched.Data) m ()
-runMainLoop runtime t =
+	SchedulerImpl schedData ->
+	Time -> Time -> SimulationMonadT (GlobalState schedData) m ()
+runMainLoop schedImpl runtime t =
 	if t >= runtime then return ()
 	else
 		do
 			-- calculate distribution of incoming calls:
 			withGodState $ spawnCallers callersArgs t (t+1)
 			-- run simulation:
-			simulateOneHour (t+1)
-			runMainLoop runtime (t+1)
+			simulateOneHour schedImpl (t+1)
+			runMainLoop schedImpl runtime (t+1)
 
-simulateOneHour :: (MonadLog m) => Time -> SimulationMonadT (GlobalState Sched.Data) m ()
-simulateOneHour tMax =
+simulateOneHour ::
+	(MonadLog m) =>
+	SchedulerImpl schedData ->
+	Time -> SimulationMonadT (GlobalState schedData) m ()
+simulateOneHour schedImpl@SchedulerImpl{..} tMax =
 	do
 		mNextEvent <- withGodState getNextEvent
 		case mNextEvent of
@@ -81,7 +91,7 @@ simulateOneHour tMax =
 									addToHistory callerInfo $ HistoryEntry t IncomingCallEvent
 									-- call scheduler:
 									acceptedCalls <- withSimState $
-										Sched.onIncomingCall callerInfo
+										sched_onIncomingCall callerInfo
 									mapM_ (\callerInfo -> addToHistory callerInfo $ HistoryEntry t ServeCallEvent) acceptedCalls
 							HangupCall callerInfo ->
 								do
@@ -89,12 +99,18 @@ simulateOneHour tMax =
 									doLog $ concat [ "\tcall ended: ", show callerInfo]
 									-- call scheduler:
 									acceptedCalls <- withSimState $
-										Sched.onHangupCall callerInfo
+										sched_onHangupCall callerInfo
 									mapM_ (\callerInfo -> addToHistory callerInfo $ HistoryEntry t ServeCallEvent) acceptedCalls
+							TimerEvent callerInfo ->
+								do
+									doLog $ concat [ "\ttimer event: ", show callerInfo]
+									-- call scheduler:
+									withSimState $
+										sched_onTimerEvent callerInfo
 						-- print analysis data:
 						history <- getHistory
 						doLog $ concat $ ["\tavg waiting time: ", show $ calcAvgWaitingTime history ]
-						simulateOneHour tMax
+						simulateOneHour schedImpl tMax
 
 --------------------------------------------------
 -- helper functions:

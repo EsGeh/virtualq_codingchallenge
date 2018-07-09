@@ -21,4 +21,5 @@ type TimeQ a = M.Map Time a
 data Event
 	= IncomingCall CallerInfo
 	| HangupCall CallerInfo
+	| TimerEvent CallerInfo
 	deriving( Show, Read, Eq, Ord)

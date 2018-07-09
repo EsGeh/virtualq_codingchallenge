@@ -31,6 +31,15 @@ data GodState
 	}
 	deriving( Show, Read, Eq, Ord)
 
+godState_addEvent time event = godState_addEvents (M.singleton time event)
+
+godState_addEvents :: TimeQ Event -> GodState -> GodState
+godState_addEvents events s@GodState{..} =
+	s{ 
+		godState_upcomingEvents =
+			godState_upcomingEvents `M.union` events
+	}
+
 --------------------------------------------------
 -- pseudo lenses for `GlobalState` (boilerplate)
 --------------------------------------------------
@@ -108,7 +117,9 @@ instance (Monad m) => MonadState d (SchedulerMonadT d m) where
 	put = SchedulerMonadT . putSimState
 
 instance (MonadLog m) => SchedulerMonad d (SchedulerMonadT d m) where
-	-- setTimer = _
+	setTimer time callerInfo =
+		SchedulerMonadT $ withGodState $ modify $
+		godState_addEvent time (TimerEvent callerInfo)
 
 instance (MonadLog m) => MonadLog (SchedulerMonadT d m) where
 	doLog str = SchedulerMonadT $ doLog str
