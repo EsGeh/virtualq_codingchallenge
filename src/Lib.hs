@@ -7,14 +7,17 @@ module Lib(
 
 import Types
 import SimulationMonad
+-- import Analytics
 import MonadLog
 
 import qualified Data.Map as M
 import qualified Data.Set as S
 import Control.Monad.Random
 import Control.Monad.State
+import Control.Monad.Writer
 import System.IO
 import Data.List
+import Control.Monad.RWS
 
 data CallersArgs
 	= CallersArgs {
@@ -33,14 +36,15 @@ minute = 1 / 60
 runSimulation :: IO ()
 runSimulation =
 	do
-		_ <- evalStateT (evalStateT (runMainLoop 3 0) godStateInit) initState
+		_ <-
+			runSimulationMonad initState (runMainLoop 3 0)
 		return ()
 
 initState = SimulationState [] 50 S.empty
 
 runMainLoop ::
 	(MonadLog m, MonadRandom m) =>
-	Time -> Time -> SimulationMonadT m ()
+	Time -> Time -> SimulationMonadT GlobalState m ()
 runMainLoop runtime t =
 	if t >= runtime then return ()
 	else
@@ -51,33 +55,35 @@ runMainLoop runtime t =
 			simulateOneHour (t+1)
 			runMainLoop runtime (t+1)
 
-simulateOneHour :: (MonadLog m) => Time -> SimulationMonadT m ()
+simulateOneHour :: (MonadLog m) => Time -> SimulationMonadT GlobalState m ()
 simulateOneHour tMax =
 	do
 		mNextEvent <- withGodState getNextEvent
 		case mNextEvent of
 			Nothing ->
 				do
-					doLog $ concat [ "no next event!" ]
+					-- doLog $ concat [ "no next event!" ]
 					return ()
 			Just (t, event) ->
 				if t >= tMax
 				then
 					do
-						doLog $ concat [ "tMax reached!" ]
+						-- doLog $ concat [ "tMax reached!" ]
 						return ()
 				else
 					do
-						_ <- popNextEvent
+						_ <- withGodState popNextEvent
 						doLog $ concat [ "t = ", show t]
 						case event of
 							IncomingCall callerInfo ->
 								do
 									doLog $ concat [ "\tincoming call: ", show callerInfo]
+									-- addLoggerEntry $ LoggerEntry IncomingCallEvent callerInfo t
 									modifySimState $ addCallerToQ callerInfo
 									withSimState serveCalls
 							HangupCall callerInfo ->
 								do
+									-- addLoggerEntry $ LoggerEntry HangupCallEvent callerInfo t
 									doLog $ concat [ "\tcall ended: ", show callerInfo]
 									modifySimState $ hangupCall callerInfo
 									withSimState serveCalls
@@ -116,11 +122,11 @@ spawnCallers CallersArgs{..} start end =
 				sort <$>
 				take number <$>
 				getRandomRs (start, end)
-				:: m [Time]
+					:: m [Time]
 			callDurations <-
 				take number <$>
 				getRandomRs callDurationRange
-				:: m [Time]
+					:: m [Time]
 			get >>= \godState@GodState{..} ->
 				do
 					let callerIds = CallerInfo <$> take number [godState_counter..]
