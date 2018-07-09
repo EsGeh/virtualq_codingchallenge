@@ -19,16 +19,21 @@ type CallerId = Int
 -- |time in hours
 type Time = Float
 
+-- invariant: number of agents = simState_availableAgents + S.size simState_currentCalls
 data SimulationState
 	= SimulationState {
 		simState_callerQ :: CallerQ,
 		simState_availableAgents :: Int,
-		-- agents_number :: Int,
 		simState_currentCalls :: S.Set CallerInfo
 	}
 	deriving( Show, Read, Eq, Ord)
 
 type TimeQ a = M.Map Time a
+
+data Event
+	= IncomingCall CallerInfo
+	| HangupCall CallerInfo
+	deriving( Show, Read, Eq, Ord)
 
 
 --------------------------------------------------

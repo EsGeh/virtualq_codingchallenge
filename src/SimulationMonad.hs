@@ -11,37 +11,13 @@ import Control.Monad.RWS
 import Control.Monad.Identity
 
 
+-- |secret simulation state
 data GodState
 	= GodState {
-		godState_upcomingEvents :: TimeQ GodEvent,
-		godState_counter :: Int
+		godState_upcomingEvents :: TimeQ Event, -- ^ stores upcoming events
+		godState_counter :: Int -- ^ internal counter
 	}
 	deriving( Show, Read, Eq, Ord)
-
-data GodEvent
-	= IncomingCall CallerInfo
-	| HangupCall CallerInfo
-	deriving( Show, Read, Eq, Ord)
-
-getNextEvent :: Monad m =>
-	StateT GodState m (Maybe (Time, GodEvent))
-getNextEvent =
-	get >>= \godState@GodState{..} ->
-		return $ M.lookupMin godState_upcomingEvents
-
-popNextEvent :: Monad m =>
-	StateT GodState m (Maybe (Time, GodEvent))
-popNextEvent =
-	do
-		next <- getNextEvent
-		modify $ \godState@GodState{..} ->
-			godState{ godState_upcomingEvents = M.deleteMin godState_upcomingEvents }
-		return next
-
-godStateInit = GodState {
-	godState_upcomingEvents = M.empty,
-	godState_counter = 0
-}
 
 data GlobalState
 	= GlobalState {
@@ -50,14 +26,9 @@ data GlobalState
 		-- glob_log :: LoggerData
 }
 
-runSimulationMonad initState =
-	evalStateT `flip` init
-	where
-		init = GlobalState{
-			glob_god = godStateInit,
-			glob_simState = initState
-			-- glob_log = [] 
-		}
+--------------------------------------------------
+-- pseudo lenses:
+--------------------------------------------------
 
 glob_mapToGod f = runIdentity . glob_mapToGodM (return . f)
 glob_mapToGodM :: Monad m => (GodState -> m GodState) -> GlobalState -> m GlobalState
@@ -74,9 +45,46 @@ glob_mapToSimStateM f x =
 		val <- f $ glob_simState x
 		return $ x{ glob_simState = val }
 
+godStateInit = GodState {
+	godState_upcomingEvents = M.empty,
+	godState_counter = 0
+}
+
+
+--------------------------------------------------
+-- api
+--------------------------------------------------
+
+getNextEvent :: Monad m =>
+	StateT GodState m (Maybe (Time, Event))
+getNextEvent =
+	get >>= \godState@GodState{..} ->
+		return $ M.lookupMin godState_upcomingEvents
+
+popNextEvent :: Monad m =>
+	StateT GodState m (Maybe (Time, Event))
+popNextEvent =
+	do
+		next <- getNextEvent
+		modify $ \godState@GodState{..} ->
+			godState{ godState_upcomingEvents = M.deleteMin godState_upcomingEvents }
+		return next
+
+--------------------------------------------------
+-- state monad to store the main state
+--------------------------------------------------
 
 type SimulationMonadT s m a = StateT s m a
 -- (read, write, state)
+
+runSimulationMonad initState =
+	evalStateT `flip` init
+	where
+		init = GlobalState{
+			glob_god = godStateInit,
+			glob_simState = initState
+			-- glob_log = [] 
+		}
 
 {-
 addLoggerEntry :: Monad m => LoggerEntry -> SimulationMonadT GlobalState m ()

@@ -19,10 +19,11 @@ import System.IO
 import Data.List
 import Control.Monad.RWS
 
+
 data CallersArgs
 	= CallersArgs {
-		density :: Float,
-		callDurationRange :: (Time, Time)
+		density :: Float, -- ^ number of calls per hour
+		callDurationRange :: (Time, Time) -- ^ range of call durations
 	}
 
 callersArgs =
@@ -88,7 +89,6 @@ simulateOneHour tMax =
 									modifySimState $ hangupCall callerInfo
 									withSimState serveCalls
 						simulateOneHour tMax
-	
 
 -- |while there are any free agents, take call:
 serveCalls :: (MonadLog m, MonadState SimulationState m) => m ()
