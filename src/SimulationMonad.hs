@@ -12,10 +12,10 @@ import Control.Monad.Identity
 
 
 -- global simulation state
-data GlobalState
+data GlobalState s
 	= GlobalState {
 		glob_god :: GodState,
-		glob_simState :: SimulationState,
+		glob_simState :: s,
 		glob_history :: History
 }
 
@@ -32,7 +32,7 @@ data GodState
 --------------------------------------------------
 
 glob_mapToGod f = runIdentity . glob_mapToGodM (return . f)
-glob_mapToGodM :: Monad m => (GodState -> m GodState) -> GlobalState -> m GlobalState
+glob_mapToGodM :: Monad m => (GodState -> m GodState) -> (GlobalState s) -> m (GlobalState s)
 glob_mapToGodM f x =
 	do
 		val <- f $ glob_god x
@@ -40,7 +40,7 @@ glob_mapToGodM f x =
 
 glob_mapToSimState f = runIdentity . glob_mapToSimStateM (return . f)
 
-glob_mapToSimStateM :: Monad m => (SimulationState -> m SimulationState) -> GlobalState -> m GlobalState
+glob_mapToSimStateM :: Monad m => (s -> m s) -> GlobalState s -> m (GlobalState s)
 glob_mapToSimStateM f x =
 	do
 		val <- f $ glob_simState x
@@ -48,7 +48,7 @@ glob_mapToSimStateM f x =
 
 glob_mapToHistory f = runIdentity . glob_mapToHistoryM (return . f)
 
-glob_mapToHistoryM :: Monad m => (History -> m History) -> GlobalState -> m GlobalState
+glob_mapToHistoryM :: Monad m => (History -> m History) -> GlobalState s -> m (GlobalState s)
 glob_mapToHistoryM f x =
 	do
 		val <- f $ glob_history x
@@ -96,15 +96,15 @@ runSimulationMonad initState =
 		}
 
 -- history:
-addToHistory :: Monad m => CallerInfo -> HistoryEntry -> SimulationMonadT GlobalState m ()
+addToHistory :: Monad m => CallerInfo -> HistoryEntry -> SimulationMonadT (GlobalState s) m ()
 addToHistory callerInfo entry =
 	modify $ glob_mapToHistory $ addEntry callerInfo entry
 
-getHistory :: Monad m => SimulationMonadT GlobalState m History
+getHistory :: Monad m => SimulationMonadT (GlobalState s) m History
 getHistory = gets glob_history
 
 --
-withGodState :: Monad m => StateT GodState m a -> SimulationMonadT GlobalState m a 
+withGodState :: Monad m => StateT GodState m a -> SimulationMonadT (GlobalState s) m a 
 withGodState f =
 	get >>= \glob@GlobalState{ glob_god = x } ->
 		do
@@ -112,7 +112,7 @@ withGodState f =
 			put glob{ glob_god = x' }
 			return ret
 
-withSimState :: Monad m => StateT SimulationState m a -> SimulationMonadT GlobalState m a 
+withSimState :: Monad m => StateT s m a -> SimulationMonadT (GlobalState s) m a 
 withSimState f =
 	get >>= \glob@GlobalState{ glob_simState = x } ->
 		do
@@ -120,15 +120,15 @@ withSimState f =
 			put glob{ glob_simState = x' }
 			return ret
 
-getGodState :: Monad m => SimulationMonadT GlobalState m GodState
+getGodState :: Monad m => SimulationMonadT (GlobalState s) m GodState
 getGodState = gets glob_god
-getSimState :: Monad m => SimulationMonadT GlobalState m SimulationState
+getSimState :: Monad m => SimulationMonadT (GlobalState s) m s
 getSimState = gets glob_simState
 
-modifyGodState :: Monad m => (GodState -> GodState) -> SimulationMonadT GlobalState m ()
+modifyGodState :: Monad m => (GodState -> GodState) -> SimulationMonadT (GlobalState s) m ()
 modifyGodState = modify . glob_mapToGod
 
-modifySimState :: Monad m => (SimulationState -> SimulationState) -> SimulationMonadT GlobalState m ()
+modifySimState :: Monad m => (s -> s) -> SimulationMonadT (GlobalState s) m ()
 modifySimState = modify . glob_mapToSimState
 
 putSimState x = modifySimState $ const x

@@ -10,6 +10,7 @@ import SimulationMonad
 import History
 import Analysis
 import MonadLog
+import qualified Scheduler as Sched
 
 import qualified Data.Map as M
 import qualified Data.Set as S
@@ -39,14 +40,12 @@ runSimulation :: IO ()
 runSimulation =
 	do
 		_ <-
-			runSimulationMonad initState (runMainLoop 3 0)
+			runSimulationMonad Sched.initData (runMainLoop 3 0)
 		return ()
-
-initState = SimulationState [] 2 S.empty
 
 runMainLoop ::
 	(MonadLog m, MonadRandom m) =>
-	Time -> Time -> SimulationMonadT GlobalState m ()
+	Time -> Time -> SimulationMonadT (GlobalState Sched.Data) m ()
 runMainLoop runtime t =
 	if t >= runtime then return ()
 	else
@@ -57,7 +56,7 @@ runMainLoop runtime t =
 			simulateOneHour (t+1)
 			runMainLoop runtime (t+1)
 
-simulateOneHour :: (MonadLog m) => Time -> SimulationMonadT GlobalState m ()
+simulateOneHour :: (MonadLog m) => Time -> SimulationMonadT (GlobalState Sched.Data) m ()
 simulateOneHour tMax =
 	do
 		mNextEvent <- withGodState getNextEvent
@@ -81,46 +80,22 @@ simulateOneHour tMax =
 								do
 									doLog $ concat [ "\tincoming call: ", show callerInfo]
 									addToHistory callerInfo $ HistoryEntry t IncomingCallEvent
-									modifySimState $ addCallerToQ callerInfo
-									acceptedCalls <- withSimState serveCalls
-									when (null acceptedCalls) $
-										do
-											doLog $ concat [ "\tall agents are busy!"]
-											waitingQ <- simState_callerQ  <$> getSimState
-											doLog $ concat [ "\twaiting Q: ", show waitingQ]
+									-- call scheduler:
+									acceptedCalls <- withSimState $
+										Sched.onIncomingCall callerInfo
 									mapM_ (\callerInfo -> addToHistory callerInfo $ HistoryEntry t ServeCallEvent) acceptedCalls
 							HangupCall callerInfo ->
 								do
 									addToHistory callerInfo $ HistoryEntry t HangupCallEvent
 									doLog $ concat [ "\tcall ended: ", show callerInfo]
-									modifySimState $ hangupCall callerInfo
-									acceptedCalls <- withSimState serveCalls
+									-- call scheduler:
+									acceptedCalls <- withSimState $
+										Sched.onHangupCall callerInfo
 									mapM_ (\callerInfo -> addToHistory callerInfo $ HistoryEntry t ServeCallEvent) acceptedCalls
 						-- print analysis data:
 						history <- getHistory
 						doLog $ concat $ ["\tavg waiting time: ", show $ calcAvgWaitingTime history ]
 						simulateOneHour tMax
-
-{- |while there are any free agents, take call:
- - |returns all accepted calls
--}
-serveCalls :: (MonadLog m, MonadState SimulationState m) => m [CallerInfo]
-serveCalls =
-	get >>= \simState@SimulationState{..} ->
-	do
-		case getCallFromQ simState of
-			Nothing -> return []
-			Just nextCaller ->
-				do
-					let mNewState = takeCall simState
-					case mNewState of
-						Nothing -> return []
-						Just newState ->
-							do
-								doLog $ concat [ "\tcall ", show nextCaller, " accepted"]
-								put newState
-								furtherCalls <- serveCalls
-								return $ nextCaller : furtherCalls
 
 --------------------------------------------------
 -- helper functions:
