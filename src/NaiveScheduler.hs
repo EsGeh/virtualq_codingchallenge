@@ -14,7 +14,8 @@ initData = Data [] 2 S.empty
 
 impl = defSchedImpl {
 	sched_onIncomingCall = onIncomingCall,
-	sched_onHangupCall = onHangupCall
+	sched_onHangupCall = onHangupCall,
+	sched_showSchedState = showSchedState
 }
 
 onIncomingCall ::
@@ -24,11 +25,11 @@ onIncomingCall _ _ callerInfo =
 	do
 		modify $ addCallerToQ callerInfo
 		acceptedCalls <- serveCallsWhilePossible
-		when (null acceptedCalls) $
-			do
-				doLog $ concat [ "\tall agents are busy!"]
-				waitingQ <- simState_callerQ  <$> get
-				doLog $ concat [ "\twaiting Q: ", show waitingQ]
+		if null acceptedCalls
+			then
+				schedLog $ concat [ "all agents are busy!" ]
+			else
+				schedLog $ concat [ "served calls: ", show acceptedCalls ]
 		return acceptedCalls
 
 onHangupCall ::
@@ -37,4 +38,7 @@ onHangupCall ::
 onHangupCall _ _ callerInfo =
 	do
 		modify $ hangupCall callerInfo
-		serveCallsWhilePossible
+		servedCalls <- serveCallsWhilePossible
+		when (not $ null servedCalls) $
+			schedLog $ concat [ "served calls: ", show servedCalls ]
+		return servedCalls

@@ -23,6 +23,15 @@ data Data
 -- |Queue of callers
 type CallerQ = [CallerInfo]
 
+showSchedState Data{..} =
+	unlines $ map concat $
+	[ [ "queue: ", show simState_callerQ ]
+	, [ "available agents: ", show simState_availableAgents ]
+	, [ "current calls: ", show simState_currentCalls ]
+	]
+
+schedLog msg = doLog $ "\tsched: " ++ msg
+
 --------------------------------------------------
 -- manipulate "Data"
 --------------------------------------------------

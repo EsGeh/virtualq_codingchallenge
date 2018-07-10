@@ -31,7 +31,9 @@ data SchedulerImpl schedData
 		sched_onTimerEvent ::
 			forall m .
 			(SchedulerMonad schedData m) =>
-			Time -> History -> CallerInfo -> m ()
+			Time -> History -> CallerInfo -> m (),
+		sched_showSchedState ::
+			schedData -> String
 	}
 
 -- |ignore every event:
@@ -39,5 +41,6 @@ defSchedImpl :: SchedulerImpl schedData
 defSchedImpl = SchedulerImpl{
 	sched_onIncomingCall = \_ _ _ -> return [],
 	sched_onHangupCall = \_ _ _ -> return [],
-	sched_onTimerEvent = \_ _ _ -> return ()
+	sched_onTimerEvent = \_ _ _ -> return (),
+	sched_showSchedState = \_ -> "sched_showSchedState not implemented!"
 }

@@ -9,7 +9,7 @@ import Types
 import SimulationMonad
 import SchedulerAPI
 import History
-import Analysis
+import qualified Analysis
 import MonadLog
 import qualified NaiveScheduler as NaiveSched
 import qualified VQScheduler as VQSched
@@ -84,11 +84,10 @@ simulateOneHour schedImpl@SchedulerImpl{..} tMax =
 				else
 					do
 						_ <- withGodState popNextEvent
-						doLog $ concat [ "t = ", show t]
+						doLog $ concat [ "t = ", show t, ": ", show event]
 						case event of
 							IncomingCall callerInfo ->
 								do
-									doLog $ concat [ "\tincoming call: ", show callerInfo]
 									addToHistory callerInfo $ HistoryEntry t IncomingCallEvent
 									history <- getHistory
 									-- call scheduler:
@@ -98,7 +97,6 @@ simulateOneHour schedImpl@SchedulerImpl{..} tMax =
 							HangupCall callerInfo ->
 								do
 									addToHistory callerInfo $ HistoryEntry t HangupCallEvent
-									doLog $ concat [ "\tcall ended: ", show callerInfo]
 									-- call scheduler:
 									history <- getHistory
 									acceptedCalls <- withSimState $
@@ -106,15 +104,28 @@ simulateOneHour schedImpl@SchedulerImpl{..} tMax =
 									mapM_ (\callerInfo -> addToHistory callerInfo $ HistoryEntry t ServeCallEvent) acceptedCalls
 							TimerEvent callerInfo ->
 								do
-									doLog $ concat [ "\ttimer event: ", show callerInfo]
 									-- call scheduler:
 									history <- getHistory
 									withSimState $
 										sched_onTimerEvent t history callerInfo
 						-- print analysis data:
-						history <- getHistory
-						doLog $ concat $ ["\tavg waiting time: ", show $ calcAvgWaitingTime history ]
+						showStatistics =<< getHistory
+						logSchedState sched_showSchedState =<< getSimState
 						simulateOneHour schedImpl tMax
+
+showStatistics history =
+	do
+		doLog "\tStatistics:"
+		doLog $ unlines $ map concat $
+			[ [ "\t\taverage waiting time: ", show $ Analysis.calcAvgWaitingTime history ]
+			, [ "\t\tmax waiting time: ", show $ Analysis.calcLongestWaitingTime history ]
+			, [ "\t\taverage serve time: ", show $ Analysis.calcAvgServeTime history ]
+			]
+logSchedState showSchedState schedState =
+	do
+		doLog $ "\tScheduler Infos:"
+		doLog $ unlines $ map ("\t\t"++) $ lines $
+			showSchedState schedState
 
 --------------------------------------------------
 -- helper functions:

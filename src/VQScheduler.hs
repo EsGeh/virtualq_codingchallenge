@@ -17,7 +17,8 @@ initData = Data [] 2 S.empty
 impl = defSchedImpl {
 	sched_onIncomingCall = onIncomingCall,
 	sched_onHangupCall = onHangupCall,
-	sched_onTimerEvent = onTimerEvent
+	sched_onTimerEvent = onTimerEvent,
+	sched_showSchedState = showSchedState
 }
 
 onIncomingCall ::
@@ -27,12 +28,13 @@ onIncomingCall t history callerInfo =
 	do
 		modify $ addCallerToQ callerInfo
 		acceptedCalls <- serveCallsWhilePossible
-		when (null acceptedCalls) $ -- if all agents are busy...
-			do
-				doLog $ concat [ "\tall agents are busy!"]
-				setTimer (t+countdownTime) callerInfo
-				waitingQ <- simState_callerQ  <$> get
-				doLog $ concat [ "\twaiting Q: ", show waitingQ]
+		if null acceptedCalls
+			then
+				do
+					schedLog $ concat [ "all agents are busy!" ]
+					setTimer (t+countdownTime) callerInfo
+			else
+				schedLog $ concat [ "served calls: ", show acceptedCalls ]
 		return acceptedCalls
 	where
 		countdownTime =
@@ -56,7 +58,6 @@ onTimerEvent ::
 	Time -> History -> CallerInfo -> m ()
 onTimerEvent _ _ callerInfo =
 	do
-		doLog $ concat [ "\ttimer event!"]
 		serveCallAndReport callerInfo
 		-- Utils.modifyMaybe $ serveCall callerInfo
 
@@ -68,8 +69,7 @@ serveCallAndReport callerInfo =
 		mNewState <- serveCall callerInfo <$> get
 		case mNewState of
 			Nothing ->
-				doLog $ concat ["WARNING: couldn't accept call!", show callerInfo]
+				schedLog $ concat ["WARNING: couldn't accept call!", show callerInfo]
 			Just newState ->
 				do
-					doLog $ concat ["accepted call ", show callerInfo]
-					put newState
+					schedLog $ concat ["accepted call ", show callerInfo]
