@@ -31,19 +31,6 @@ getCallFromQ :: SimulationState -> Maybe CallerInfo
 getCallFromQ simState@SimulationState{..} =
 	listToMaybe simState_callerQ
 
-{-
-serveCallsWhilePossible ::
-	MonadState SimulationState m =>
-	m [CallerInfo]
-serveCallsWhilePossible =
-	do
-		mCallerInfo <- state serveNextCall
-		case mCallerInfo of
-			Nothing -> return []
-			Just callerInfo ->
-				(callerInfo:) <$> serveCallsWhilePossible
--}
-
 serveNextCall :: SimulationState -> (Maybe CallerInfo, SimulationState)
 serveNextCall simState@SimulationState{..} =
 	case
@@ -72,15 +59,8 @@ addCallerToQ :: CallerInfo -> SimulationState -> SimulationState
 addCallerToQ callerInfo simState@SimulationState{..} =
 	simState{ simState_callerQ = simState_callerQ ++ [callerInfo] }
 
-hangupCall :: CallerInfo -> SimulationState -> SimulationState
+hangupCall :: CallerInfo -> SimulationState -> Maybe SimulationState
 hangupCall callerInfo simState@SimulationState{..} =
-	simState{
-		simState_availableAgents = simState_availableAgents + 1,
-		simState_currentCalls = S.delete callerInfo simState_currentCalls
-	}
-
-	--Important BUGFIX to do:
-{-
 	if callerInfo `elem` simState_currentCalls
 	then
 		Just $ simState{
@@ -89,4 +69,3 @@ hangupCall callerInfo simState@SimulationState{..} =
 		}
 	else
 		Nothing
--}

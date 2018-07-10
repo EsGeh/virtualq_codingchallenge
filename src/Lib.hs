@@ -22,55 +22,48 @@ import Control.Monad.State
 import Control.Monad.Writer
 import System.IO
 import Data.List
+import Data.Maybe
 import Control.Monad.RWS
 
 
-data CallersArgs
-	= CallersArgs {
-		density :: Float, -- ^ number of calls per hour
-		callDurationRange :: (Time, Time) -- ^ range of call durations
-	}
-
-callersArgs =
-	CallersArgs {
-		density = 10,
-		callDurationRange = (2 * minute, 20 * minute)
+simulationSettings =
+	SimulationSettings {
+		settings_density = 10,
+		settings_callDurationRange = (2 * minute, 20 * minute)
 	}
 
 simStateInit = SimulationState [] 2 S.empty
-
-minute = 1 / 60
 
 runSimulation :: IO ()
 runSimulation =
 	do
 		doLog $ "----------------------------------------------"
 		doLog $ "simulating with NaiveScheduler..."
-		_ <- runSimulationMonad simStateInit NaiveSched.initData (runMainLoop NaiveSched.impl 3 0)
+		_ <- runSimulationMonad simStateInit NaiveSched.initData (runMainLoop simulationSettings NaiveSched.impl 3 0)
 		doLog $ "----------------------------------------------"
 		doLog $ "simulating with VQScheduler..."
-		_ <- runSimulationMonad simStateInit VQSched.initData (runMainLoop VQSched.impl 3 0)
+		_ <- runSimulationMonad simStateInit VQSched.initData (runMainLoop simulationSettings VQSched.impl 3 0)
 		return ()
 
 runMainLoop ::
 	(MonadLog m, MonadRandom m) =>
-	SchedulerImpl schedData ->
+	SimulationSettings -> SchedulerImpl schedData ->
 	Time -> Time -> SimulationMonadT (GlobalState schedData) m ()
-runMainLoop schedImpl runtime t =
+runMainLoop simulationSettings schedImpl runtime t =
 	if t >= runtime then return ()
 	else
 		do
 			-- calculate distribution of incoming calls:
-			withGodState $ spawnCallers callersArgs t (t+1)
+			withGodState $ spawnCallers simulationSettings t (t+1)
 			-- run simulation:
-			simulateOneHour schedImpl (t+1)
-			runMainLoop schedImpl runtime (t+1)
+			simulateOneHour simulationSettings schedImpl (t+1)
+			runMainLoop simulationSettings schedImpl runtime (t+1)
 
 simulateOneHour ::
-	(MonadLog m) =>
-	SchedulerImpl schedData ->
+	(MonadLog m, MonadRandom m) =>
+	SimulationSettings -> SchedulerImpl schedData ->
 	Time -> SimulationMonadT (GlobalState schedData) m ()
-simulateOneHour schedImpl@SchedulerImpl{..} tMax =
+simulateOneHour simulationSettings schedImpl@SchedulerImpl{..} tMax =
 	do
 		mNextEvent <- withGodState getNextEvent
 		case mNextEvent of
@@ -99,26 +92,26 @@ simulateOneHour schedImpl@SchedulerImpl{..} tMax =
 									addToHistory callerInfo $ HistoryEntry t IncomingCallEvent
 									-- call scheduler:
 									history <- getHistory
-									acceptedCalls <- withSchedulerData $
+									acceptedCalls <- withSchedulerData simulationSettings t $
 										sched_onIncomingCall t history callerInfo
 									mapM_ (\callerInfo -> addToHistory callerInfo $ HistoryEntry t ServeCallEvent) acceptedCalls
 							HangupCall callerInfo ->
 								do
-									modifySimState $ hangupCall callerInfo
+									modifySimState $ fmap (fromMaybe $ error "inconsistent state in HangupCall event!") $ hangupCall callerInfo
 									addToHistory callerInfo $ HistoryEntry t HangupCallEvent
 									-- call scheduler:
 									history <- getHistory
-									acceptedCalls <- withSchedulerData $
+									acceptedCalls <- withSchedulerData simulationSettings t $
 										sched_onHangupCall t history callerInfo
 									mapM_ (\callerInfo -> addToHistory callerInfo $ HistoryEntry t ServeCallEvent) acceptedCalls
 							TimerEvent callerInfo ->
 								do
 									-- call scheduler:
 									history <- getHistory
-									withSchedulerData $
+									withSchedulerData simulationSettings t $
 										sched_onTimerEvent t history callerInfo
 						-- print analysis data:
-						simulateOneHour schedImpl tMax
+						simulateOneHour simulationSettings schedImpl tMax
 
 showSimulationState SimulationState{..} =
 	do
@@ -150,10 +143,10 @@ logSchedData showSchedData schedData =
 -- helper functions:
 --------------------------------------------------
 
-spawnCallers :: forall m . (MonadRandom m, MonadState GodState m) => CallersArgs -> Time -> Time -> m ()
-spawnCallers CallersArgs{..} start end =
+spawnCallers :: forall m . (MonadRandom m, MonadState GodState m) => SimulationSettings -> Time -> Time -> m ()
+spawnCallers SimulationSettings{..} start end =
 	let
-		number = ceiling $ (end-start)*density
+		number = ceiling $ (end-start) * settings_density
 	in
 		do
 			callTimes <-
@@ -161,18 +154,12 @@ spawnCallers CallersArgs{..} start end =
 				take number <$>
 				getRandomRs (start, end)
 					:: m [Time]
-			callDurations <-
-				take number <$>
-				getRandomRs callDurationRange
-					:: m [Time]
 			get >>= \godState@GodState{..} ->
 				do
 					let callerIds = CallerInfo <$> take number [godState_counter..]
 					put $ godState{
 						godState_upcomingEvents =
 							(godState_upcomingEvents `M.union`) $
-							(M.fromList $ callTimes `zip` (IncomingCall <$> callerIds))
-							`M.union`
-							(M.fromList $ zipWith (+) callTimes callDurations `zip` (HangupCall <$> callerIds)),
+							(M.fromList $ callTimes `zip` (IncomingCall <$> callerIds)),
 						godState_counter = godState_counter + number
 					}

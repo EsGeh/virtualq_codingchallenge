@@ -15,6 +15,14 @@ import Control.Monad.State
 import Control.Monad.Writer
 import Control.Monad.RWS
 import Control.Monad.Identity
+import Control.Monad.Random
+import Control.Monad.Reader
+
+data SimulationSettings
+	= SimulationSettings {
+		settings_density :: Float, -- ^ number of calls per hour
+		settings_callDurationRange :: (Time, Time) -- ^ range of call durations
+	}
 
 
 -- global simulation state
@@ -123,34 +131,46 @@ runSimulationMonad simStateInit schedDataInit =
 		}
 
 -- this is the monad in which the scheduler runs:
-newtype SchedulerMonadT d m a = SchedulerMonadT { fromSchedulerMonadT :: StateT (GlobalState d) m a }
-	deriving( MonadTrans, Applicative, Monad, Functor )
+newtype SchedulerMonadT d m a = SchedulerMonadT { fromSchedulerMonadT :: ReaderT (SimulationSettings,Time) (StateT (GlobalState d) m) a }
+	deriving( {-MonadTrans,-} Applicative, Monad, Functor )
 
 instance (Monad m) => MonadState d (SchedulerMonadT d m) where
-	get = SchedulerMonadT $ getSchedData
-	put = SchedulerMonadT . putSchedData
+	get = SchedulerMonadT $ lift $ getSchedData
+	put = SchedulerMonadT . lift . putSchedData
 
-instance (MonadLog m) => SchedulerMonad d (SchedulerMonadT d m) where
+instance (MonadLog m, MonadRandom m) => SchedulerMonad d (SchedulerMonadT d m) where
 	setTimer time callerInfo =
-		SchedulerMonadT $ withGodState $ modify $
+		SchedulerMonadT $ ReaderT $ \_ -> withGodState $ modify $
 		godState_addEvent time (TimerEvent callerInfo)
 
 	takeCall callerInfo =
 		SchedulerMonadT $
+		ReaderT $ \(SimulationSettings{..},time) ->
 		getSimState >>= \simState -> 
 			case SimState.serveCall callerInfo simState of
 				Nothing -> return False
-				Just newState -> putSimState newState >> return True
+				Just newState ->
+					do
+						putSimState newState
+						-- add 
+						callDuration <- getRandomR settings_callDurationRange
+						modifyGodState $ godState_addEvent (time+callDuration) $
+							HangupCall callerInfo
+						return True
 
 	takeNextCall =
 		SchedulerMonadT $
-		withSimState $ state SimState.serveNextCall
-
-	{-
-	takeCallsWhilePossible =
-		SchedulerMonadT $
-		withSimState $ SimState.serveCallsWhilePossible
-	-}
+		ReaderT $ \(SimulationSettings{..},time) ->
+		do
+			mCallerInfo <- withSimState $ state SimState.serveNextCall
+			case mCallerInfo of
+				Just callerInfo ->
+					do
+						callDuration <- getRandomR settings_callDurationRange
+						modifyGodState $ godState_addEvent callDuration $
+							HangupCall callerInfo
+						return $ Just callerInfo
+				Nothing -> return Nothing
 
 instance (MonadLog m) => MonadLog (SchedulerMonadT d m) where
 	doLog str = SchedulerMonadT $ doLog str
@@ -172,9 +192,9 @@ withGodState f =
 			put glob{ glob_god = x' }
 			return ret
 
-withSchedulerData :: Monad m => SchedulerMonadT schedData m a -> SimulationMonadT (GlobalState schedData) m a 
-withSchedulerData =
-	fromSchedulerMonadT
+withSchedulerData :: Monad m => SimulationSettings -> Time -> SchedulerMonadT schedData m a -> SimulationMonadT (GlobalState schedData) m a 
+withSchedulerData simulationSettings time =
+	(runReaderT `flip` (simulationSettings,time)) . fromSchedulerMonadT
 
 withSimState :: Monad m => StateT SimulationState m a -> SimulationMonadT (GlobalState schedData) m a 
 withSimState f =

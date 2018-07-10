@@ -20,3 +20,6 @@ data Event
 	| HangupCall CallerInfo
 	| TimerEvent CallerInfo
 	deriving( Show, Read, Eq, Ord)
+
+minute :: Float
+minute = 1 / 60
