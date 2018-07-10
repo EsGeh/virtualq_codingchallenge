@@ -5,15 +5,15 @@ module NaiveScheduler where
 import SchedulerBase
 import SchedulerAPI
 
-import qualified Data.Set as S
 import Control.Monad.State
-import Data.Maybe
 
 
 type Data = ()
 
+initData :: Data
 initData = ()
 
+impl :: SchedulerImpl Data
 impl = defSchedImpl {
 	sched_onIncomingCall = onIncomingCall,
 	sched_onHangupCall = onHangupCall
@@ -22,7 +22,7 @@ impl = defSchedImpl {
 onIncomingCall ::
 	(SchedulerMonad Data m) =>
 	Time -> History -> CallerInfo -> m [CallerInfo]
-onIncomingCall _ _ callerInfo =
+onIncomingCall _ _ _ =
 	do
 		acceptedCalls <- takeNextCallWhilePossible
 		if null acceptedCalls
@@ -35,7 +35,7 @@ onIncomingCall _ _ callerInfo =
 onHangupCall ::
 	(SchedulerMonad Data m) =>
 	Time -> History -> CallerInfo -> m [CallerInfo]
-onHangupCall _ _ callerInfo =
+onHangupCall _ _ _ =
 	do
 		servedCalls <- takeNextCallWhilePossible
 		when (not $ null servedCalls) $

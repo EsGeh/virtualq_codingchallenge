@@ -7,7 +7,6 @@ import Types
 
 
 import qualified Data.Set as S
-import Control.Monad.State
 import Data.Maybe
 import Data.List
 
@@ -28,7 +27,7 @@ type CallerQ = [CallerInfo]
 --------------------------------------------------
 
 getCallFromQ :: SimulationState -> Maybe CallerInfo
-getCallFromQ simState@SimulationState{..} =
+getCallFromQ SimulationState{..} =
 	listToMaybe simState_callerQ
 
 serveNextCall :: SimulationState -> (Maybe CallerInfo, SimulationState)

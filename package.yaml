@@ -24,14 +24,15 @@ dependencies:
 
 library:
   source-dirs: src
+  exposed-modules:
+    - Lib
   ghc-options:
+    - -Wall
     - -fno-warn-tabs
   dependencies:
     - MonadRandom
     - containers
     - mtl
-  exposed-modules:
-    - Lib
 
 executables:
   queuing-simulation-exe:

@@ -14,6 +14,7 @@ import qualified Data.Map as M
 
 
 -- number of latest entries taken into account for calculations:
+historyLength :: Int
 historyLength = 5
 
 
@@ -54,13 +55,6 @@ calcAvgServeTime _ =
 calcWaitingTime :: Time -> Time -> Time
 calcWaitingTime callTime serveTime = serveTime - callTime
 
-{-
-getCallTime :: CallerHistory -> Maybe Time
-getCallTime events =
-	history_time <$>
-	(find ((/=IncomingCallEvent) . history_event) $ events)
--}
-
 getCallTimeAndServeTime :: CallerHistory -> (Time, Maybe Time)
 getCallTimeAndServeTime events =
 	case break ((==IncomingCallEvent) . history_event) events of
@@ -70,17 +64,6 @@ getCallTimeAndServeTime events =
 			, fmap history_time $ find ((==ServeCallEvent) . history_event) $ reverse laterEvents
 			)
 
-{-
-getCallTimeAndServeTime :: CallerHistory -> Maybe (Time, Time)
-getCallTimeAndServeTime events =
-	case dropWhile ((/=ServeCallEvent) . history_event) events of
-		[] -> Nothing
-		serveCallEvent:previousEvents ->
-			do
-				incomingCallEvent <- find ((==IncomingCallEvent) . history_event) previousEvents
-				return (history_time incomingCallEvent, history_time serveCallEvent)
--}
-
 avg :: [Float] -> Float
 avg values =
 	sum values / fromIntegral (length values)
@@ -89,5 +72,5 @@ diffBetweenNeighbours :: [Float] -> [Float]
 diffBetweenNeighbours l =
 	case l of
 		[] -> []
-		(x:[]) -> []
+		(_:[]) -> []
 		(x:xs:rest) -> (x - xs) : diffBetweenNeighbours (xs:rest)

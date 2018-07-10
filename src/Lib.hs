@@ -9,9 +9,7 @@ import Types
 import SimulationState
 import SimulationMonad
 import SchedulerAPI
-import History
 import qualified Analysis
-import MonadLog
 import qualified NaiveScheduler as NaiveSched
 import qualified VQScheduler as VQSched
 
@@ -19,19 +17,18 @@ import qualified Data.Map as M
 import qualified Data.Set as S
 import Control.Monad.Random
 import Control.Monad.State
-import Control.Monad.Writer
-import System.IO
 import Data.List
 import Data.Maybe
-import Control.Monad.RWS
 
 
-simulationSettings =
+simulationSettings_args :: SimulationSettings
+simulationSettings_args =
 	SimulationSettings {
 		settings_density = 10,
 		settings_callDurationRange = (2 * minute, 20 * minute)
 	}
 
+simStateInit :: SimulationState
 simStateInit = SimulationState [] 2 S.empty
 
 runSimulation :: IO ()
@@ -39,10 +36,10 @@ runSimulation =
 	do
 		doLog $ "----------------------------------------------"
 		doLog $ "simulating with NaiveScheduler..."
-		_ <- runSimulationMonad simStateInit NaiveSched.initData (runMainLoop simulationSettings NaiveSched.impl 3 0)
+		_ <- runSimulationMonad simStateInit NaiveSched.initData (runMainLoop simulationSettings_args NaiveSched.impl 3 0)
 		doLog $ "----------------------------------------------"
 		doLog $ "simulating with VQScheduler..."
-		_ <- runSimulationMonad simStateInit VQSched.initData (runMainLoop simulationSettings VQSched.impl 3 0)
+		_ <- runSimulationMonad simStateInit VQSched.initData (runMainLoop simulationSettings_args VQSched.impl 3 0)
 		return ()
 
 runMainLoop ::
@@ -94,7 +91,7 @@ simulateOneHour simulationSettings schedImpl@SchedulerImpl{..} tMax =
 									history <- getHistory
 									acceptedCalls <- withSchedulerData simulationSettings t $
 										sched_onIncomingCall t history callerInfo
-									mapM_ (\callerInfo -> addToHistory callerInfo $ HistoryEntry t ServeCallEvent) acceptedCalls
+									mapM_ (\acceptedCaller -> addToHistory acceptedCaller $ HistoryEntry t ServeCallEvent) acceptedCalls
 							HangupCall callerInfo ->
 								do
 									modifySimState $ fmap (fromMaybe $ error "inconsistent state in HangupCall event!") $ hangupCall callerInfo
@@ -103,7 +100,7 @@ simulateOneHour simulationSettings schedImpl@SchedulerImpl{..} tMax =
 									history <- getHistory
 									acceptedCalls <- withSchedulerData simulationSettings t $
 										sched_onHangupCall t history callerInfo
-									mapM_ (\callerInfo -> addToHistory callerInfo $ HistoryEntry t ServeCallEvent) acceptedCalls
+									mapM_ (\acceptedCaller -> addToHistory acceptedCaller $ HistoryEntry t ServeCallEvent) acceptedCalls
 							TimerEvent callerInfo ->
 								do
 									-- call scheduler:
@@ -113,6 +110,7 @@ simulateOneHour simulationSettings schedImpl@SchedulerImpl{..} tMax =
 						-- print analysis data:
 						simulateOneHour simulationSettings schedImpl tMax
 
+showSimulationState :: MonadLog m => SimulationState -> m ()
 showSimulationState SimulationState{..} =
 	do
 		doLog "\tCallcenter state:"
@@ -123,6 +121,7 @@ showSimulationState SimulationState{..} =
 			, [ "\t\tcurrent calls: ", show simState_currentCalls ]
 			]
 
+showStatistics :: MonadLog m => Time -> History -> m ()
 showStatistics t history =
 	do
 		doLog "\tStatistics:"
@@ -131,6 +130,8 @@ showStatistics t history =
 			, [ "\t\tmax waiting time: ", show $ Analysis.calcLongestWaitingTime t history ]
 			, [ "\t\taverage serve time: ", show $ Analysis.calcAvgServeTime t history ]
 			]
+
+logSchedData :: MonadLog m => (schedData -> Maybe String) -> schedData -> m ()
 logSchedData showSchedData schedData =
 	case showSchedData schedData of
 		Nothing -> return ()

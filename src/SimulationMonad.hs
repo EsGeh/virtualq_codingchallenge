@@ -12,8 +12,6 @@ import SchedulerAPI
 
 import qualified Data.Map as M
 import Control.Monad.State
-import Control.Monad.Writer
-import Control.Monad.RWS
 import Control.Monad.Identity
 import Control.Monad.Random
 import Control.Monad.Reader
@@ -42,6 +40,7 @@ data GodState
 	}
 	deriving( Show, Read, Eq, Ord)
 
+godState_addEvent :: Time -> Event -> GodState -> GodState
 godState_addEvent time event = godState_addEvents (M.singleton time event)
 
 godState_addEvents :: TimeQ Event -> GodState -> GodState
@@ -55,20 +54,25 @@ godState_addEvents events s@GodState{..} =
 -- pseudo lenses for `GlobalState` (boilerplate)
 --------------------------------------------------
 
+glob_mapToGod :: (GodState -> GodState) -> GlobalState schedData -> GlobalState schedData
 glob_mapToGod f = runIdentity . glob_mapToGodM (return . f)
+
 glob_mapToGodM :: Monad m => (GodState -> m GodState) -> (GlobalState schedData) -> m (GlobalState schedData)
 glob_mapToGodM f x =
 	do
 		val <- f $ glob_god x
 		return $ x{ glob_god = val }
 
+glob_mapToSchedData :: (schedData -> schedData) -> GlobalState schedData -> GlobalState schedData
 glob_mapToSchedData f = runIdentity . glob_mapToSchedDataM (return . f)
+
 glob_mapToSchedDataM :: Monad m => (schedData -> m schedData) -> (GlobalState schedData) -> m (GlobalState schedData)
 glob_mapToSchedDataM f x =
 	do
 		val <- f $ glob_schedData x
 		return $ x{ glob_schedData = val }
 
+glob_mapToSimState :: (SimulationState -> SimulationState) -> GlobalState schedData -> GlobalState schedData
 glob_mapToSimState f = runIdentity . glob_mapToSimStateM (return . f)
 
 glob_mapToSimStateM :: Monad m => (SimulationState -> m SimulationState) -> GlobalState schedData -> m (GlobalState schedData)
@@ -77,6 +81,7 @@ glob_mapToSimStateM f x =
 		val <- f $ glob_simState x
 		return $ x{ glob_simState = val }
 
+glob_mapToHistory :: (History -> History) -> GlobalState schedData -> GlobalState schedData
 glob_mapToHistory f = runIdentity . glob_mapToHistoryM (return . f)
 
 glob_mapToHistoryM :: Monad m => (History -> m History) -> GlobalState schedData -> m (GlobalState schedData)
@@ -85,6 +90,7 @@ glob_mapToHistoryM f x =
 		val <- f $ glob_history x
 		return $ x{ glob_history = val }
 
+godStateInit :: GodState
 godStateInit = GodState {
 	godState_upcomingEvents = M.empty,
 	godState_counter = 0
@@ -95,20 +101,21 @@ godStateInit = GodState {
 -- api
 --------------------------------------------------
 
-getNextEvent :: Monad m =>
+getNextEvent ::
+	Monad m =>
 	StateT GodState m (Maybe (Time, Event))
 getNextEvent =
-	get >>= \godState@GodState{..} ->
+	get >>= \GodState{..} ->
 		return $ M.lookupMin godState_upcomingEvents
 
 popNextEvent :: Monad m =>
 	StateT GodState m (Maybe (Time, Event))
 popNextEvent =
 	do
-		next <- getNextEvent
+		nextEvent <- getNextEvent
 		modify $ \godState@GodState{..} ->
 			godState{ godState_upcomingEvents = M.deleteMin godState_upcomingEvents }
-		return next
+		return nextEvent
 
 --------------------------------------------------
 -- state monad to store the main state
@@ -121,9 +128,9 @@ runSimulationMonad ::
 	Monad m => 
 	SimulationState -> schedData -> SimulationMonadT (GlobalState schedData) m a -> m a
 runSimulationMonad simStateInit schedDataInit =
-	evalStateT `flip` init
+	evalStateT `flip` initGlob
 	where
-		init = GlobalState{
+		initGlob = GlobalState{
 			glob_god = godStateInit,
 			glob_simState = simStateInit,
 			glob_schedData = schedDataInit,
@@ -160,7 +167,7 @@ instance (MonadLog m, MonadRandom m) => SchedulerMonad d (SchedulerMonadT d m) w
 
 	takeNextCall =
 		SchedulerMonadT $
-		ReaderT $ \(SimulationSettings{..},time) ->
+		ReaderT $ \(SimulationSettings{..},_) ->
 		do
 			mCallerInfo <- withSimState $ state SimState.serveNextCall
 			case mCallerInfo of
@@ -221,6 +228,17 @@ modifySchedData = modify . glob_mapToSchedData
 modifySimState :: Monad m => (SimulationState -> SimulationState) -> SimulationMonadT (GlobalState schedData) m ()
 modifySimState = modify . glob_mapToSimState
 
+putSimState ::
+	Monad m =>
+	SimulationState -> SimulationMonadT (GlobalState schedData) m ()
 putSimState x = modifySimState $ const x
+
+putSchedData ::
+	Monad m =>
+	b -> SimulationMonadT (GlobalState b) m ()
 putSchedData x = modifySchedData $ const x
+
+putGodState ::
+	Monad m =>
+	GodState -> SimulationMonadT (GlobalState schedData) m ()
 putGodState x = modifyGodState $ const x

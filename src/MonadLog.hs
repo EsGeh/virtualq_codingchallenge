@@ -1,7 +1,6 @@
 module MonadLog where
 
 
-import System.IO
 import Control.Monad.State
 import Control.Monad.Writer
 import Control.Monad.RWS

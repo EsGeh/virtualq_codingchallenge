@@ -2,14 +2,11 @@
 {-# LANGUAGE FlexibleContexts #-}
 module VQScheduler where
 
-import SchedulerBase hiding( Data )
+import SchedulerBase
 import SchedulerAPI
 import qualified Analysis
-import qualified Utils
 
-import qualified Data.Set as S
 import Control.Monad.State
-import Data.Maybe
 import Data.List
 import Control.Monad.Identity
 
@@ -21,20 +18,34 @@ data Data =
 		data_urgentQ :: [CallerInfo ] -- ^ customers to call back immediately 
 	}
 
+data_mapToVirtualQ ::
+	([CallerInfo] -> [CallerInfo]) -> Data -> Data
 data_mapToVirtualQ f = runIdentity . data_mapToVirtualQM (return . f)
+
+data_mapToVirtualQM ::
+	Monad m =>
+	([CallerInfo] -> m [CallerInfo]) -> Data -> m Data
 data_mapToVirtualQM f x@Data{..} =
 	do
 		val <- f $ data_virtualQ
 		return $ x{ data_virtualQ = val }
 
+data_mapToUrgentList ::
+	([CallerInfo] -> [CallerInfo]) -> Data -> Data
 data_mapToUrgentList f = runIdentity . data_mapToUrgentListM (return . f)
+
+data_mapToUrgentListM ::
+	Monad m =>
+	([CallerInfo] -> m [CallerInfo]) -> Data -> m Data
 data_mapToUrgentListM f x@Data{..} =
 	do
 		val <- f $ data_urgentQ
 		return $ x{ data_urgentQ = val }
 
+initData :: Data
 initData = Data [] []
 
+impl :: SchedulerImpl Data
 impl = defSchedImpl {
 	sched_onIncomingCall = onIncomingCall,
 	sched_onHangupCall = onHangupCall,
@@ -42,6 +53,7 @@ impl = defSchedImpl {
 	sched_showSchedData = showSchedData
 }
 
+showSchedData :: Data -> Maybe String
 showSchedData Data{..} = Just $ unlines $ map concat $
 	[ [ "virtualQ: ", show data_virtualQ ]
 	, [ "urgentQ: ", show data_urgentQ ]
