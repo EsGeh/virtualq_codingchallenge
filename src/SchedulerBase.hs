@@ -1,5 +1,6 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE TupleSections #-}
 module SchedulerBase where
 
 import SchedulerAPI
@@ -7,6 +8,7 @@ import SchedulerAPI
 import qualified Data.Set as S
 import Control.Monad.State
 import Data.Maybe
+import Data.List
 
 
 -- invariant: number of agents = simState_availableAgents + S.size simState_currentCalls
@@ -18,6 +20,9 @@ data Data
 	}
 	deriving( Show, Read, Eq, Ord)
 
+-- |Queue of callers
+type CallerQ = [CallerInfo]
+
 --------------------------------------------------
 -- manipulate "Data"
 --------------------------------------------------
@@ -26,17 +31,39 @@ getCallFromQ :: Data -> Maybe CallerInfo
 getCallFromQ simState@Data{..} =
 	listToMaybe simState_callerQ
 
-takeCall :: Data -> Maybe Data
-takeCall simState@Data{..} =
-	if (simState_availableAgents == 0)
+serveCallsWhilePossible ::
+	MonadState Data m =>
+	m [CallerInfo]
+serveCallsWhilePossible =
+	do
+		mCallerInfo <- state serveNextCall
+		case mCallerInfo of
+			Nothing -> return []
+			Just callerInfo ->
+				(callerInfo:) <$> serveCallsWhilePossible
+
+serveNextCall :: Data -> (Maybe CallerInfo, Data)
+serveNextCall simState@Data{..} =
+	case
+		(do
+			nextCaller <- listToMaybe simState_callerQ
+			(nextCaller,) <$> serveCall nextCaller simState
+		)
+	of
+		Nothing -> (Nothing, simState)
+		Just (nextCaller, newData) -> (Just nextCaller, newData)
+
+serveCall :: CallerInfo -> Data -> Maybe Data
+serveCall callerInfo simState@Data{..} =
+	if
+		simState_availableAgents == 0
+		|| callerInfo `notElem` simState_callerQ
 	then Nothing
 	else
-		do
-			nextCaller <- listToMaybe simState_callerQ
 			return $ simState{
-				simState_callerQ = drop 1 simState_callerQ,
+				simState_callerQ = delete callerInfo $ simState_callerQ,
 				simState_availableAgents = simState_availableAgents - 1,
-				simState_currentCalls = S.insert nextCaller simState_currentCalls
+				simState_currentCalls = S.insert callerInfo simState_currentCalls
 			}
 
 addCallerToQ :: CallerInfo -> Data -> Data
@@ -49,23 +76,3 @@ hangupCall callerInfo simState@Data{..} =
 		simState_availableAgents = simState_availableAgents + 1,
 		simState_currentCalls = S.delete callerInfo simState_currentCalls
 	}
-
-serveCalls ::
-	(SchedulerMonad Data m) =>
-	m [CallerInfo]
-serveCalls =
-	get >>= \simState@Data{..} ->
-	do
-		case getCallFromQ simState of
-			Nothing -> return []
-			Just nextCaller ->
-				do
-					let mNewState = takeCall simState
-					case mNewState of
-						Nothing -> return []
-						Just newState ->
-							do
-								--doLog $ concat [ "\tcall ", show nextCaller, " accepted"]
-								put newState
-								furtherCalls <- serveCalls
-								return $ nextCaller : furtherCalls

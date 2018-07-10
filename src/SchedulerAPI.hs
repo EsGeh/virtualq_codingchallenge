@@ -3,12 +3,14 @@
 module SchedulerAPI(
 	module Types,
 	module MonadLog,
+	module History,
 	SchedulerMonad(..),
 	SchedulerImpl(..),
 	defSchedImpl,
 ) where
 
 import Types
+import History
 import MonadLog
 import Control.Monad.State
 
@@ -21,21 +23,21 @@ data SchedulerImpl schedData
 		sched_onIncomingCall ::
 			forall m .
 			(SchedulerMonad schedData m) =>
-			CallerInfo -> m [CallerInfo],
+			Time -> History -> CallerInfo -> m [CallerInfo],
 		sched_onHangupCall ::
 			forall m .
 			(SchedulerMonad schedData m) =>
-			CallerInfo -> m [CallerInfo],
+			Time -> History -> CallerInfo -> m [CallerInfo],
 		sched_onTimerEvent ::
 			forall m .
 			(SchedulerMonad schedData m) =>
-			CallerInfo -> m ()
+			Time -> History -> CallerInfo -> m ()
 	}
 
 -- |ignore every event:
 defSchedImpl :: SchedulerImpl schedData
 defSchedImpl = SchedulerImpl{
-	sched_onIncomingCall = const $ return [],
-	sched_onHangupCall = const $ return [],
-	sched_onTimerEvent = const $ return ()
+	sched_onIncomingCall = \_ _ _ -> return [],
+	sched_onHangupCall = \_ _ _ -> return [],
+	sched_onTimerEvent = \_ _ _ -> return ()
 }

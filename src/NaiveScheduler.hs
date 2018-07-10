@@ -19,11 +19,11 @@ impl = defSchedImpl {
 
 onIncomingCall ::
 	(SchedulerMonad Data m) =>
-	CallerInfo -> m [CallerInfo]
-onIncomingCall callerInfo =
+	Time -> History -> CallerInfo -> m [CallerInfo]
+onIncomingCall _ _ callerInfo =
 	do
 		modify $ addCallerToQ callerInfo
-		acceptedCalls <- serveCalls
+		acceptedCalls <- serveCallsWhilePossible
 		when (null acceptedCalls) $
 			do
 				doLog $ concat [ "\tall agents are busy!"]
@@ -33,8 +33,8 @@ onIncomingCall callerInfo =
 
 onHangupCall ::
 	(SchedulerMonad Data m) =>
-	CallerInfo -> m [CallerInfo]
-onHangupCall callerInfo =
+	Time -> History -> CallerInfo -> m [CallerInfo]
+onHangupCall _ _ callerInfo =
 	do
 		modify $ hangupCall callerInfo
-		serveCalls
+		serveCallsWhilePossible

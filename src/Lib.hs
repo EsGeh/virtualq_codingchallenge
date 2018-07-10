@@ -12,6 +12,7 @@ import History
 import Analysis
 import MonadLog
 import qualified NaiveScheduler as NaiveSched
+import qualified VQScheduler as VQSched
 
 import qualified Data.Map as M
 import qualified Data.Set as S
@@ -40,12 +41,12 @@ minute = 1 / 60
 runSimulation :: IO ()
 runSimulation =
 	do
-		doLog $ concat ["simulating with NaiveScheduler..."]
+		doLog $ "----------------------------------------------"
+		doLog $ "simulating with NaiveScheduler..."
 		_ <- runSimulationMonad NaiveSched.initData (runMainLoop NaiveSched.impl 3 0)
-		-- TODO: ...
-		{-
-		doLog $ concat ["simulating with VQScheduler..."]
-		-}
+		doLog $ "----------------------------------------------"
+		doLog $ "simulating with VQScheduler..."
+		_ <- runSimulationMonad VQSched.initData (runMainLoop VQSched.impl 3 0)
 		return ()
 
 runMainLoop ::
@@ -89,24 +90,27 @@ simulateOneHour schedImpl@SchedulerImpl{..} tMax =
 								do
 									doLog $ concat [ "\tincoming call: ", show callerInfo]
 									addToHistory callerInfo $ HistoryEntry t IncomingCallEvent
+									history <- getHistory
 									-- call scheduler:
 									acceptedCalls <- withSimState $
-										sched_onIncomingCall callerInfo
+										sched_onIncomingCall t history callerInfo
 									mapM_ (\callerInfo -> addToHistory callerInfo $ HistoryEntry t ServeCallEvent) acceptedCalls
 							HangupCall callerInfo ->
 								do
 									addToHistory callerInfo $ HistoryEntry t HangupCallEvent
 									doLog $ concat [ "\tcall ended: ", show callerInfo]
 									-- call scheduler:
+									history <- getHistory
 									acceptedCalls <- withSimState $
-										sched_onHangupCall callerInfo
+										sched_onHangupCall t history callerInfo
 									mapM_ (\callerInfo -> addToHistory callerInfo $ HistoryEntry t ServeCallEvent) acceptedCalls
 							TimerEvent callerInfo ->
 								do
 									doLog $ concat [ "\ttimer event: ", show callerInfo]
 									-- call scheduler:
+									history <- getHistory
 									withSimState $
-										sched_onTimerEvent callerInfo
+										sched_onTimerEvent t history callerInfo
 						-- print analysis data:
 						history <- getHistory
 						doLog $ concat $ ["\tavg waiting time: ", show $ calcAvgWaitingTime history ]
