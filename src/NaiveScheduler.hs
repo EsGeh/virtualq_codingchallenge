@@ -10,12 +10,13 @@ import Control.Monad.State
 import Data.Maybe
 
 
-initData = Data [] 2 S.empty
+type Data = ()
+
+initData = ()
 
 impl = defSchedImpl {
 	sched_onIncomingCall = onIncomingCall,
-	sched_onHangupCall = onHangupCall,
-	sched_showSchedState = showSchedState
+	sched_onHangupCall = onHangupCall
 }
 
 onIncomingCall ::
@@ -23,8 +24,7 @@ onIncomingCall ::
 	Time -> History -> CallerInfo -> m [CallerInfo]
 onIncomingCall _ _ callerInfo =
 	do
-		modify $ addCallerToQ callerInfo
-		acceptedCalls <- serveCallsWhilePossible
+		acceptedCalls <- takeCallsWhilePossible
 		if null acceptedCalls
 			then
 				schedLog $ concat [ "all agents are busy!" ]
@@ -37,8 +37,7 @@ onHangupCall ::
 	Time -> History -> CallerInfo -> m [CallerInfo]
 onHangupCall _ _ callerInfo =
 	do
-		modify $ hangupCall callerInfo
-		servedCalls <- serveCallsWhilePossible
+		servedCalls <- takeCallsWhilePossible
 		when (not $ null servedCalls) $
 			schedLog $ concat [ "served calls: ", show servedCalls ]
 		return servedCalls

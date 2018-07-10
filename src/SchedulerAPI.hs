@@ -1,4 +1,5 @@
 {-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE Rank2Types #-}
 module SchedulerAPI(
 	module Types,
@@ -12,11 +13,15 @@ module SchedulerAPI(
 import Types
 import History
 import MonadLog
+-- import qualified SimulationState as SimState
 import Control.Monad.State
 
 
 class (MonadLog m, MonadState d m) => SchedulerMonad d m | m -> d where
 	setTimer :: Time -> CallerInfo -> m ()
+	takeCall :: CallerInfo -> m Bool
+	takeNextCall :: m (Maybe CallerInfo)
+	takeCallsWhilePossible :: m [CallerInfo]
 
 data SchedulerImpl schedData
 	= SchedulerImpl {
@@ -32,8 +37,8 @@ data SchedulerImpl schedData
 			forall m .
 			(SchedulerMonad schedData m) =>
 			Time -> History -> CallerInfo -> m (),
-		sched_showSchedState ::
-			schedData -> String
+		sched_showSchedData ::
+			schedData -> Maybe String
 	}
 
 -- |ignore every event:
@@ -42,5 +47,5 @@ defSchedImpl = SchedulerImpl{
 	sched_onIncomingCall = \_ _ _ -> return [],
 	sched_onHangupCall = \_ _ _ -> return [],
 	sched_onTimerEvent = \_ _ _ -> return (),
-	sched_showSchedState = \_ -> "sched_showSchedState not implemented!"
+	sched_showSchedData = \_ -> Nothing
 }

@@ -2,7 +2,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 module VQScheduler where
 
-import SchedulerBase
+import SchedulerBase hiding( Data )
 import SchedulerAPI
 import qualified Analysis
 import qualified Utils
@@ -12,27 +12,32 @@ import Control.Monad.State
 import Data.Maybe
 
 
-initData = Data [] 2 S.empty
+-- | the virtualQ:
+type Data = [CallerInfo]
+
+initData = []
 
 impl = defSchedImpl {
 	sched_onIncomingCall = onIncomingCall,
 	sched_onHangupCall = onHangupCall,
 	sched_onTimerEvent = onTimerEvent,
-	sched_showSchedState = showSchedState
+	sched_showSchedData = showSchedData
 }
+
+showSchedData = Just . show
 
 onIncomingCall ::
 	(SchedulerMonad Data m) =>
 	Time -> History -> CallerInfo -> m [CallerInfo]
 onIncomingCall t history callerInfo =
 	do
-		modify $ addCallerToQ callerInfo
-		acceptedCalls <- serveCallsWhilePossible
+		acceptedCalls <- takeCallsWhilePossible
 		if null acceptedCalls
 			then
 				do
 					schedLog $ concat [ "all agents are busy!" ]
 					setTimer (t+countdownTime) callerInfo
+					-- modify $ (callerInfo:)
 			else
 				schedLog $ concat [ "served calls: ", show acceptedCalls ]
 		return acceptedCalls
@@ -48,10 +53,8 @@ onHangupCall ::
 	(SchedulerMonad Data m) =>
 	Time -> History -> CallerInfo -> m [CallerInfo]
 onHangupCall _ _ callerInfo =
-	do
-		modify $ hangupCall callerInfo
-		return []
-		-- serveCallsWhilePossible
+	return []
+	-- serveCallsWhilePossible
 
 onTimerEvent ::
 	(SchedulerMonad Data m) =>
@@ -66,10 +69,9 @@ serveCallAndReport ::
 	CallerInfo -> m ()
 serveCallAndReport callerInfo =
 	do
-		mNewState <- serveCall callerInfo <$> get
-		case mNewState of
-			Nothing ->
+		callTaken <- takeCall callerInfo
+		case callTaken of
+			False ->
 				schedLog $ concat ["WARNING: couldn't accept call!", show callerInfo]
-			Just newState ->
-				do
-					schedLog $ concat ["accepted call ", show callerInfo]
+			True ->
+				schedLog $ concat ["accepted call ", show callerInfo]

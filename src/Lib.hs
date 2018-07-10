@@ -6,6 +6,7 @@ module Lib(
 ) where
 
 import Types
+import SimulationState
 import SimulationMonad
 import SchedulerAPI
 import History
@@ -36,6 +37,8 @@ callersArgs =
 		callDurationRange = (2 * minute, 20 * minute)
 	}
 
+simStateInit = SimulationState [] 2 S.empty
+
 minute = 1 / 60
 
 runSimulation :: IO ()
@@ -43,10 +46,10 @@ runSimulation =
 	do
 		doLog $ "----------------------------------------------"
 		doLog $ "simulating with NaiveScheduler..."
-		_ <- runSimulationMonad NaiveSched.initData (runMainLoop NaiveSched.impl 3 0)
+		_ <- runSimulationMonad simStateInit NaiveSched.initData (runMainLoop NaiveSched.impl 3 0)
 		doLog $ "----------------------------------------------"
 		doLog $ "simulating with VQScheduler..."
-		_ <- runSimulationMonad VQSched.initData (runMainLoop VQSched.impl 3 0)
+		_ <- runSimulationMonad simStateInit VQSched.initData (runMainLoop VQSched.impl 3 0)
 		return ()
 
 runMainLoop ::
@@ -88,29 +91,31 @@ simulateOneHour schedImpl@SchedulerImpl{..} tMax =
 						case event of
 							IncomingCall callerInfo ->
 								do
+									modifySimState $ addCallerToQ callerInfo
 									addToHistory callerInfo $ HistoryEntry t IncomingCallEvent
-									history <- getHistory
 									-- call scheduler:
-									acceptedCalls <- withSimState $
+									history <- getHistory
+									acceptedCalls <- withSchedulerData $
 										sched_onIncomingCall t history callerInfo
 									mapM_ (\callerInfo -> addToHistory callerInfo $ HistoryEntry t ServeCallEvent) acceptedCalls
 							HangupCall callerInfo ->
 								do
+									modifySimState $ hangupCall callerInfo
 									addToHistory callerInfo $ HistoryEntry t HangupCallEvent
 									-- call scheduler:
 									history <- getHistory
-									acceptedCalls <- withSimState $
+									acceptedCalls <- withSchedulerData $
 										sched_onHangupCall t history callerInfo
 									mapM_ (\callerInfo -> addToHistory callerInfo $ HistoryEntry t ServeCallEvent) acceptedCalls
 							TimerEvent callerInfo ->
 								do
 									-- call scheduler:
 									history <- getHistory
-									withSimState $
+									withSchedulerData $
 										sched_onTimerEvent t history callerInfo
 						-- print analysis data:
 						showStatistics t =<< getHistory
-						logSchedState sched_showSchedState =<< getSimState
+						logSchedData sched_showSchedData =<< getSchedData
 						simulateOneHour schedImpl tMax
 
 showStatistics t history =
@@ -121,11 +126,13 @@ showStatistics t history =
 			, [ "\t\tmax waiting time: ", show $ Analysis.calcLongestWaitingTime t history ]
 			, [ "\t\taverage serve time: ", show $ Analysis.calcAvgServeTime t history ]
 			]
-logSchedState showSchedState schedState =
-	do
-		doLog $ "\tScheduler Infos:"
-		doLog $ unlines $ map ("\t\t"++) $ lines $
-			showSchedState schedState
+logSchedData showSchedData schedData =
+	case showSchedData schedData of
+		Nothing -> return ()
+		Just repr -> 
+			do
+				doLog $ "\tScheduler Infos:"
+				doLog $ unlines $ map ("\t\t"++) $ lines $ repr
 
 --------------------------------------------------
 -- helper functions:
