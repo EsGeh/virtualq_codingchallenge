@@ -109,17 +109,17 @@ simulateOneHour schedImpl@SchedulerImpl{..} tMax =
 									withSimState $
 										sched_onTimerEvent t history callerInfo
 						-- print analysis data:
-						showStatistics =<< getHistory
+						showStatistics t =<< getHistory
 						logSchedState sched_showSchedState =<< getSimState
 						simulateOneHour schedImpl tMax
 
-showStatistics history =
+showStatistics t history =
 	do
 		doLog "\tStatistics:"
 		doLog $ unlines $ map concat $
-			[ [ "\t\taverage waiting time: ", show $ Analysis.calcAvgWaitingTime history ]
-			, [ "\t\tmax waiting time: ", show $ Analysis.calcLongestWaitingTime history ]
-			, [ "\t\taverage serve time: ", show $ Analysis.calcAvgServeTime history ]
+			[ [ "\t\taverage waiting time: ", show $ Analysis.calcAvgWaitingTime t history ]
+			, [ "\t\tmax waiting time: ", show $ Analysis.calcLongestWaitingTime t history ]
+			, [ "\t\taverage serve time: ", show $ Analysis.calcAvgServeTime t history ]
 			]
 logSchedState showSchedState schedState =
 	do

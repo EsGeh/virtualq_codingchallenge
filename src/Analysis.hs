@@ -6,6 +6,7 @@ module Analysis(
 
 import Types
 import History
+import qualified Utils
 
 import Data.List
 import Data.Maybe
@@ -16,46 +17,60 @@ import qualified Data.Map as M
 historyLength = 5
 
 
--- TODO: take into account current time!
-
-calcAvgWaitingTime :: History -> Float
-calcAvgWaitingTime =
+calcAvgWaitingTime :: Time -> History -> Float
+calcAvgWaitingTime currentTime =
 	avg
 	. map (uncurry calcWaitingTime)
 	. take historyLength
 	. reverse . sortOn snd -- sort latest to earliest serve time
-	. catMaybes
-	. map getCallTimeAndServeTime
+	. map (
+		Utils.mapSnd (fromMaybe currentTime) 
+		. getCallTimeAndServeTime
+	) -- if not yet served, assume currentTime
 	. M.elems
 
-calcLongestWaitingTime :: History -> Float
-calcLongestWaitingTime =
+calcLongestWaitingTime :: Time -> History -> Float
+calcLongestWaitingTime currentTime =
 	maximum
 	. map (uncurry calcWaitingTime)
 	. take historyLength
 	. reverse . sortOn snd -- sort latest to earliest serve time
-	. catMaybes
-	. map getCallTimeAndServeTime
+	. map (
+		Utils.mapSnd (fromMaybe currentTime)
+		. getCallTimeAndServeTime
+	) -- if not yet served, assume currentTime
 	. M.elems
 
-calcAvgServeTime :: History -> Float
-calcAvgServeTime =
+calcAvgServeTime :: Time -> History -> Float
+calcAvgServeTime _ =
 	avg
 	. diffBetweenNeighbours
 	. take historyLength  -- only take into account the latest entries
 	. reverse . sort -- sort latest to earliest
 	. catMaybes
-	. map (fmap snd . getCallTimeAndServeTime)
+	. map (snd . getCallTimeAndServeTime)
 	. M.elems
 
 calcWaitingTime :: Time -> Time -> Time
 calcWaitingTime callTime serveTime = serveTime - callTime
 
+{-
 getCallTime :: CallerHistory -> Maybe Time
 getCallTime events =
 	history_time <$>
 	(find ((/=IncomingCallEvent) . history_event) $ events)
+-}
 
+getCallTimeAndServeTime :: CallerHistory -> (Time, Maybe Time)
+getCallTimeAndServeTime events =
+	case break ((==IncomingCallEvent) . history_event) events of
+		(_,[]) -> error "history corrupted!"
+		(laterEvents, incomingCallEvent:_) ->
+			( history_time incomingCallEvent
+			, fmap history_time $ find ((==ServeCallEvent) . history_event) $ reverse laterEvents
+			)
+
+{-
 getCallTimeAndServeTime :: CallerHistory -> Maybe (Time, Time)
 getCallTimeAndServeTime events =
 	case dropWhile ((/=ServeCallEvent) . history_event) events of
@@ -64,6 +79,7 @@ getCallTimeAndServeTime events =
 			do
 				incomingCallEvent <- find ((==IncomingCallEvent) . history_event) previousEvents
 				return (history_time incomingCallEvent, history_time serveCallEvent)
+-}
 
 avg :: [Float] -> Float
 avg values =

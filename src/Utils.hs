@@ -12,3 +12,6 @@ modifyMaybe f =
 	case f oldVal of
 		Nothing -> oldVal
 		Just newVal -> newVal
+
+mapFst f (a, b) = (f a, b)
+mapSnd f (a, b) = (a, f b)

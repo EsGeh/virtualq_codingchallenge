@@ -40,9 +40,9 @@ onIncomingCall t history callerInfo =
 		countdownTime =
 			max currentWaitingTime $
 			longestWaitingTime + avgServeTime
-		currentWaitingTime = Analysis.calcAvgWaitingTime history
-		longestWaitingTime = Analysis.calcLongestWaitingTime history
-		avgServeTime = Analysis.calcAvgServeTime history
+		currentWaitingTime = Analysis.calcAvgWaitingTime t history
+		longestWaitingTime = Analysis.calcLongestWaitingTime t history
+		avgServeTime = Analysis.calcAvgServeTime t history
 
 onHangupCall ::
 	(SchedulerMonad Data m) =>

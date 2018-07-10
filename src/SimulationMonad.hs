@@ -165,8 +165,3 @@ modifySimState = modify . glob_mapToSimState
 
 putSimState x = modifySimState $ const x
 putGodState x = modifyGodState $ const x
-
-{-
-mapFst f (a, b) = (f a, b)
-mapSnd f (a, b) = (a, f b)
--}
