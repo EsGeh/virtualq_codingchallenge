@@ -23,7 +23,7 @@ data SimulationSettings
 	}
 
 
--- global simulation state
+-- |global simulation state
 data GlobalState schedData
 	= GlobalState {
 		glob_god :: GodState,
@@ -190,7 +190,7 @@ addToHistory callerInfo entry =
 getHistory :: Monad m => SimulationMonadT (GlobalState schedData) m History
 getHistory = gets glob_history
 
---
+-- helper functions for the SimulationMonadT
 withGodState :: Monad m => StateT GodState m a -> SimulationMonadT (GlobalState schedData) m a 
 withGodState f =
 	get >>= \glob@GlobalState{ glob_god = x } ->
@@ -214,8 +214,10 @@ withSimState f =
 
 getGodState :: Monad m => SimulationMonadT (GlobalState schedData) m GodState
 getGodState = gets glob_god
+
 getSchedData :: Monad m => SimulationMonadT (GlobalState schedData) m schedData
 getSchedData = gets glob_schedData
+
 getSimState :: Monad m => SimulationMonadT (GlobalState schedData) m SimulationState
 getSimState = gets glob_simState
 

@@ -8,6 +8,7 @@ import SchedulerAPI
 import Control.Monad.State
 
 
+-- |no need to store keep any state with this scheduling algorithm
 type Data = ()
 
 initData :: Data

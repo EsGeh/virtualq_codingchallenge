@@ -11,36 +11,18 @@ import Data.List
 import Control.Monad.Identity
 
 
--- | the virtualQ:
+-- |information stored for this algorithm
 data Data =
 	Data{
 		data_virtualQ :: [CallerInfo], -- ^ customers waiting to be called back
 		data_urgentQ :: [CallerInfo ] -- ^ customers to call back immediately 
 	}
 
-data_mapToVirtualQ ::
-	([CallerInfo] -> [CallerInfo]) -> Data -> Data
-data_mapToVirtualQ f = runIdentity . data_mapToVirtualQM (return . f)
+-- (for boilerplate helper functions, see below)
 
-data_mapToVirtualQM ::
-	Monad m =>
-	([CallerInfo] -> m [CallerInfo]) -> Data -> m Data
-data_mapToVirtualQM f x@Data{..} =
-	do
-		val <- f $ data_virtualQ
-		return $ x{ data_virtualQ = val }
-
-data_mapToUrgentList ::
-	([CallerInfo] -> [CallerInfo]) -> Data -> Data
-data_mapToUrgentList f = runIdentity . data_mapToUrgentListM (return . f)
-
-data_mapToUrgentListM ::
-	Monad m =>
-	([CallerInfo] -> m [CallerInfo]) -> Data -> m Data
-data_mapToUrgentListM f x@Data{..} =
-	do
-		val <- f $ data_urgentQ
-		return $ x{ data_urgentQ = val }
+--------------------------------------------------
+-- implementation specific code:
+--------------------------------------------------
 
 initData :: Data
 initData = Data [] []
@@ -109,3 +91,31 @@ onTimerEvent _ _ callerInfo =
 		schedLog $ concat [ show callerInfo, " becomes urgent..." ]
 		modify $ data_mapToVirtualQ $ delete callerInfo
 		modify $ data_mapToUrgentList $ (++[callerInfo])
+
+--------------------------------------------------
+-- pseudo lenses for `Data` (boilerplate)
+--------------------------------------------------
+
+data_mapToVirtualQ ::
+	([CallerInfo] -> [CallerInfo]) -> Data -> Data
+data_mapToVirtualQ f = runIdentity . data_mapToVirtualQM (return . f)
+
+data_mapToVirtualQM ::
+	Monad m =>
+	([CallerInfo] -> m [CallerInfo]) -> Data -> m Data
+data_mapToVirtualQM f x@Data{..} =
+	do
+		val <- f $ data_virtualQ
+		return $ x{ data_virtualQ = val }
+
+data_mapToUrgentList ::
+	([CallerInfo] -> [CallerInfo]) -> Data -> Data
+data_mapToUrgentList f = runIdentity . data_mapToUrgentListM (return . f)
+
+data_mapToUrgentListM ::
+	Monad m =>
+	([CallerInfo] -> m [CallerInfo]) -> Data -> m Data
+data_mapToUrgentListM f x@Data{..} =
+	do
+		val <- f $ data_urgentQ
+		return $ x{ data_urgentQ = val }
