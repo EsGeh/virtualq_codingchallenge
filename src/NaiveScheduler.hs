@@ -24,12 +24,12 @@ onIncomingCall ::
 	Time -> History -> CallerInfo -> m [CallerInfo]
 onIncomingCall _ _ callerInfo =
 	do
-		acceptedCalls <- takeCallsWhilePossible
+		acceptedCalls <- takeNextCallWhilePossible
 		if null acceptedCalls
 			then
 				schedLog $ concat [ "all agents are busy!" ]
 			else
-				schedLog $ concat [ "served calls: ", show acceptedCalls ]
+				schedLog $ concat [ "accepted calls: ", show acceptedCalls ]
 		return acceptedCalls
 
 onHangupCall ::
@@ -37,7 +37,7 @@ onHangupCall ::
 	Time -> History -> CallerInfo -> m [CallerInfo]
 onHangupCall _ _ callerInfo =
 	do
-		servedCalls <- takeCallsWhilePossible
+		servedCalls <- takeNextCallWhilePossible
 		when (not $ null servedCalls) $
-			schedLog $ concat [ "served calls: ", show servedCalls ]
+			schedLog $ concat [ "accepted calls: ", show servedCalls ]
 		return servedCalls

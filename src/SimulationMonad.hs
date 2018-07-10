@@ -142,13 +142,15 @@ instance (MonadLog m) => SchedulerMonad d (SchedulerMonadT d m) where
 				Nothing -> return False
 				Just newState -> putSimState newState >> return True
 
-	takeCallsWhilePossible =
-		SchedulerMonadT $
-		withSimState $ SimState.serveCallsWhilePossible
-
 	takeNextCall =
 		SchedulerMonadT $
 		withSimState $ state SimState.serveNextCall
+
+	{-
+	takeCallsWhilePossible =
+		SchedulerMonadT $
+		withSimState $ SimState.serveCallsWhilePossible
+	-}
 
 instance (MonadLog m) => MonadLog (SchedulerMonadT d m) where
 	doLog str = SchedulerMonadT $ doLog str

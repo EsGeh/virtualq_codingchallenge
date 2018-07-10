@@ -87,7 +87,11 @@ simulateOneHour schedImpl@SchedulerImpl{..} tMax =
 				else
 					do
 						_ <- withGodState popNextEvent
-						doLog $ concat [ "t = ", show t, ": ", show event]
+						doLog $ concat [ "t = ", show t]
+						showSimulationState =<< getSimState
+						showStatistics t =<< getHistory
+						logSchedData sched_showSchedData =<< getSchedData
+						doLog $ concat ["\tEvent: ", show event]
 						case event of
 							IncomingCall callerInfo ->
 								do
@@ -114,9 +118,17 @@ simulateOneHour schedImpl@SchedulerImpl{..} tMax =
 									withSchedulerData $
 										sched_onTimerEvent t history callerInfo
 						-- print analysis data:
-						showStatistics t =<< getHistory
-						logSchedData sched_showSchedData =<< getSchedData
 						simulateOneHour schedImpl tMax
+
+showSimulationState SimulationState{..} =
+	do
+		doLog "\tCallcenter state:"
+		doLog $
+			unlines $ map concat $
+			[ [ "\t\tqueue: ", show simState_callerQ ]
+			, [ "\t\tavailable agents: ", show simState_availableAgents ]
+			, [ "\t\tcurrent calls: ", show simState_currentCalls ]
+			]
 
 showStatistics t history =
 	do

@@ -23,13 +23,6 @@ data SimulationState
 -- |Queue of callers
 type CallerQ = [CallerInfo]
 
-showSchedState SimulationState{..} =
-	unlines $ map concat $
-	[ [ "queue: ", show simState_callerQ ]
-	, [ "available agents: ", show simState_availableAgents ]
-	, [ "current calls: ", show simState_currentCalls ]
-	]
-
 --------------------------------------------------
 -- manipulate "SimulationState"
 --------------------------------------------------
@@ -38,6 +31,7 @@ getCallFromQ :: SimulationState -> Maybe CallerInfo
 getCallFromQ simState@SimulationState{..} =
 	listToMaybe simState_callerQ
 
+{-
 serveCallsWhilePossible ::
 	MonadState SimulationState m =>
 	m [CallerInfo]
@@ -48,6 +42,7 @@ serveCallsWhilePossible =
 			Nothing -> return []
 			Just callerInfo ->
 				(callerInfo:) <$> serveCallsWhilePossible
+-}
 
 serveNextCall :: SimulationState -> (Maybe CallerInfo, SimulationState)
 serveNextCall simState@SimulationState{..} =
@@ -83,3 +78,15 @@ hangupCall callerInfo simState@SimulationState{..} =
 		simState_availableAgents = simState_availableAgents + 1,
 		simState_currentCalls = S.delete callerInfo simState_currentCalls
 	}
+
+	--Important BUGFIX to do:
+{-
+	if callerInfo `elem` simState_currentCalls
+	then
+		Just $ simState{
+			simState_availableAgents = simState_availableAgents + 1,
+			simState_currentCalls = S.delete callerInfo simState_currentCalls
+		}
+	else
+		Nothing
+-}

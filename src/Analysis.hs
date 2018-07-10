@@ -31,7 +31,7 @@ calcAvgWaitingTime currentTime =
 
 calcLongestWaitingTime :: Time -> History -> Float
 calcLongestWaitingTime currentTime =
-	maximum
+	(\l -> if null l then 0 else maximum l)
 	. map (uncurry calcWaitingTime)
 	. take historyLength
 	. reverse . sortOn snd -- sort latest to earliest serve time
