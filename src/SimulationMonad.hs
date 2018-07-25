@@ -118,15 +118,14 @@ popNextEvent =
 		return nextEvent
 
 --------------------------------------------------
--- state monad to store the main state
+-- state monad to store the main state of the simulation
 --------------------------------------------------
 
-type SimulationMonadT schedData m a = StateT schedData m a
--- (read, write, state)
+type SimulationMonadT schedData m a = StateT (GlobalState schedData) m a
 
 runSimulationMonad ::
 	Monad m => 
-	SimulationState -> schedData -> SimulationMonadT (GlobalState schedData) m a -> m a
+	SimulationState -> schedData -> SimulationMonadT schedData m a -> m a
 runSimulationMonad simStateInit schedDataInit =
 	evalStateT `flip` initGlob
 	where
@@ -137,7 +136,76 @@ runSimulationMonad simStateInit schedDataInit =
 			glob_history = M.empty
 		}
 
--- this is the monad in which the scheduler runs:
+-- history:
+addToHistory :: Monad m => CallerInfo -> HistoryEntry -> SimulationMonadT schedData m ()
+addToHistory callerInfo entry =
+	modify $ glob_mapToHistory $ addEntry callerInfo entry
+
+getHistory :: Monad m => SimulationMonadT schedData m History
+getHistory = gets glob_history
+
+-- helper functions for the SimulationMonadT
+
+withGodState :: Monad m => StateT GodState m a -> SimulationMonadT schedData m a 
+withGodState f =
+	get >>= \glob@GlobalState{ glob_god = x } ->
+		do
+			(ret, x') <- lift $ runStateT f x
+			put glob{ glob_god = x' }
+			return ret
+
+withSchedulerData :: Monad m => SimulationSettings -> Time -> SchedulerMonadT schedData m a -> SimulationMonadT schedData m a 
+withSchedulerData simulationSettings time =
+	(runReaderT `flip` (simulationSettings,time)) . fromSchedulerMonadT
+
+withSimState :: Monad m => StateT SimulationState m a -> SimulationMonadT schedData m a 
+withSimState f =
+	get >>= \glob@GlobalState{ glob_simState = x } ->
+		do
+			(ret, x') <- lift $ runStateT f x
+			put glob{ glob_simState = x' }
+			return ret
+
+
+getGodState :: Monad m => SimulationMonadT schedData m GodState
+getGodState = gets glob_god
+
+getSchedData :: Monad m => SimulationMonadT schedData m schedData
+getSchedData = gets glob_schedData
+
+getSimState :: Monad m => SimulationMonadT schedData m SimulationState
+getSimState = gets glob_simState
+
+modifyGodState :: Monad m => (GodState -> GodState) -> SimulationMonadT schedData m ()
+modifyGodState = modify . glob_mapToGod
+
+modifySchedData :: Monad m => (schedData -> schedData) -> SimulationMonadT schedData m ()
+modifySchedData = modify . glob_mapToSchedData
+
+modifySimState :: Monad m => (SimulationState -> SimulationState) -> SimulationMonadT schedData m ()
+modifySimState = modify . glob_mapToSimState
+
+putSimState ::
+	Monad m =>
+	SimulationState -> SimulationMonadT schedData m ()
+putSimState x = modifySimState $ const x
+
+putSchedData ::
+	Monad m =>
+	schedData -> SimulationMonadT schedData m ()
+putSchedData x = modifySchedData $ const x
+
+putGodState ::
+	Monad m =>
+	GodState -> SimulationMonadT schedData m ()
+putGodState x = modifyGodState $ const x
+
+
+--------------------------------------------------
+-- the monad for the scheduling algorithm (hide implementation details from scheduler)
+--------------------------------------------------
+
+-- this is the monad in which the scheduling algorithm runs:
 newtype SchedulerMonadT d m a = SchedulerMonadT { fromSchedulerMonadT :: ReaderT (SimulationSettings,Time) (StateT (GlobalState d) m) a }
 	deriving( {-MonadTrans,-} Applicative, Monad, Functor )
 
@@ -181,66 +249,3 @@ instance (MonadLog m, MonadRandom m) => SchedulerMonad d (SchedulerMonadT d m) w
 
 instance (MonadLog m) => MonadLog (SchedulerMonadT d m) where
 	doLog str = SchedulerMonadT $ doLog str
-
--- history:
-addToHistory :: Monad m => CallerInfo -> HistoryEntry -> SimulationMonadT (GlobalState schedData) m ()
-addToHistory callerInfo entry =
-	modify $ glob_mapToHistory $ addEntry callerInfo entry
-
-getHistory :: Monad m => SimulationMonadT (GlobalState schedData) m History
-getHistory = gets glob_history
-
--- helper functions for the SimulationMonadT
-withGodState :: Monad m => StateT GodState m a -> SimulationMonadT (GlobalState schedData) m a 
-withGodState f =
-	get >>= \glob@GlobalState{ glob_god = x } ->
-		do
-			(ret, x') <- lift $ runStateT f x
-			put glob{ glob_god = x' }
-			return ret
-
-withSchedulerData :: Monad m => SimulationSettings -> Time -> SchedulerMonadT schedData m a -> SimulationMonadT (GlobalState schedData) m a 
-withSchedulerData simulationSettings time =
-	(runReaderT `flip` (simulationSettings,time)) . fromSchedulerMonadT
-
-withSimState :: Monad m => StateT SimulationState m a -> SimulationMonadT (GlobalState schedData) m a 
-withSimState f =
-	get >>= \glob@GlobalState{ glob_simState = x } ->
-		do
-			(ret, x') <- lift $ runStateT f x
-			put glob{ glob_simState = x' }
-			return ret
-
-
-getGodState :: Monad m => SimulationMonadT (GlobalState schedData) m GodState
-getGodState = gets glob_god
-
-getSchedData :: Monad m => SimulationMonadT (GlobalState schedData) m schedData
-getSchedData = gets glob_schedData
-
-getSimState :: Monad m => SimulationMonadT (GlobalState schedData) m SimulationState
-getSimState = gets glob_simState
-
-modifyGodState :: Monad m => (GodState -> GodState) -> SimulationMonadT (GlobalState schedData) m ()
-modifyGodState = modify . glob_mapToGod
-
-modifySchedData :: Monad m => (schedData -> schedData) -> SimulationMonadT (GlobalState schedData) m ()
-modifySchedData = modify . glob_mapToSchedData
-
-modifySimState :: Monad m => (SimulationState -> SimulationState) -> SimulationMonadT (GlobalState schedData) m ()
-modifySimState = modify . glob_mapToSimState
-
-putSimState ::
-	Monad m =>
-	SimulationState -> SimulationMonadT (GlobalState schedData) m ()
-putSimState x = modifySimState $ const x
-
-putSchedData ::
-	Monad m =>
-	b -> SimulationMonadT (GlobalState b) m ()
-putSchedData x = modifySchedData $ const x
-
-putGodState ::
-	Monad m =>
-	GodState -> SimulationMonadT (GlobalState schedData) m ()
-putGodState x = modifyGodState $ const x

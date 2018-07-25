@@ -54,7 +54,7 @@ runSimulation =
 runMainLoop ::
 	(MonadLog m, MonadRandom m) =>
 	SimulationSettings -> SchedulerImpl schedData ->
-	Time -> Time -> SimulationMonadT (GlobalState schedData) m ()
+	Time -> Time -> SimulationMonadT schedData m ()
 runMainLoop simulationSettings schedImpl runtime t =
 	if t >= runtime then return ()
 	else
@@ -68,7 +68,7 @@ runMainLoop simulationSettings schedImpl runtime t =
 simulateOneHour ::
 	(MonadLog m, MonadRandom m) =>
 	SimulationSettings -> SchedulerImpl schedData ->
-	Time -> SimulationMonadT (GlobalState schedData) m ()
+	Time -> SimulationMonadT schedData m ()
 simulateOneHour simulationSettings schedImpl@SchedulerImpl{..} tMax =
 	do
 		mNextEvent <- withGodState getNextEvent
