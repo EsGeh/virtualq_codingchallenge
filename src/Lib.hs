@@ -21,12 +21,21 @@ import Data.List
 import Data.Maybe
 
 
-simulationSettings_args :: SimulationSettings
-simulationSettings_args =
-	SimulationSettings {
-		settings_density = 10,
-		settings_callDurationRange = (2 * minute, 20 * minute)
+
+data SimulationArgs
+	= SimulationArgs {
+		simArgs_simulationSettings :: SimulationSettings,
+		simArgs_runtime :: Time -- ^ how many hours to simulate
 	}
+
+simulationArgs :: SimulationArgs
+simulationArgs = SimulationArgs{
+	simArgs_simulationSettings = SimulationSettings {
+		settings_density = 10, -- ^ how many calls will arrive per hour
+		settings_callDurationRange = (2 * minute, 20 * minute) -- ^ min and max duration of a call
+	},
+	simArgs_runtime = 3 -- simulate 3 hours
+}
 
 simStateInit :: SimulationState
 simStateInit = SimulationState [] 2 S.empty
@@ -36,10 +45,10 @@ runSimulation =
 	do
 		doLog $ "----------------------------------------------"
 		doLog $ "simulating with NaiveScheduler..."
-		_ <- runSimulationMonad simStateInit NaiveSched.initData (runMainLoop simulationSettings_args NaiveSched.impl 3 0)
+		_ <- runSimulationMonad simStateInit NaiveSched.initData (runMainLoop (simArgs_simulationSettings simulationArgs) NaiveSched.impl (simArgs_runtime simulationArgs) 0)
 		doLog $ "----------------------------------------------"
 		doLog $ "simulating with VQScheduler..."
-		_ <- runSimulationMonad simStateInit VQSched.initData (runMainLoop simulationSettings_args VQSched.impl 3 0)
+		_ <- runSimulationMonad simStateInit VQSched.initData (runMainLoop (simArgs_simulationSettings simulationArgs) VQSched.impl (simArgs_runtime simulationArgs) 0)
 		return ()
 
 runMainLoop ::
